@@ -189,6 +189,7 @@ export default function EditorPage() {
           darkMode={darkMode}
           onSelectionChange={handleSelectionChange}
           onHistoryChange={handleHistoryChange}
+          onToolReset={() => setActiveTool('select')}
         />
       </div>
 

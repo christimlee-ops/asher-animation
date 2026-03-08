@@ -34,6 +34,7 @@ interface CanvasProps {
   darkMode: boolean;
   onSelectionChange: (obj: fabric.FabricObject | null) => void;
   onHistoryChange: (canUndo: boolean, canRedo: boolean) => void;
+  onToolReset?: () => void;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ const GRID_SIZE = 40;
 
 // ─── Component ───────────────────────────────────────────────────────
 const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
-  ({ activeTool, fillColor, strokeColor, darkMode, onSelectionChange, onHistoryChange }, ref) => {
+  ({ activeTool, fillColor, strokeColor, darkMode, onSelectionChange, onHistoryChange, onToolReset }, ref) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasElRef = useRef<HTMLCanvasElement>(null);
     const fcRef = useRef<fabric.Canvas | null>(null);
@@ -448,10 +449,15 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         tempShapeRef.current = null;
         drawStartRef.current = null;
         saveHistory();
+        // Auto-switch back to select tool after drawing
+        onToolReset?.();
       };
 
       // Pencil path created
-      const handlePathCreated = () => saveHistory();
+      const handlePathCreated = () => {
+        saveHistory();
+        onToolReset?.();
+      };
 
       fc.on('mouse:down', handleMouseDown);
       fc.on('mouse:move', handleMouseMove);
@@ -541,15 +547,20 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           if (!fc) return;
           const activeSelection = fc.getActiveObject();
           if (!activeSelection || activeSelection.type !== 'activeSelection') return;
-          const objects = (activeSelection as fabric.ActiveSelection).getObjects();
-          objects.forEach((o) => fc.remove(o));
-          const group = new fabric.Group(objects);
-          fc.add(group);
-          fc.setActiveObject(group);
+          const objects = (activeSelection as fabric.ActiveSelection).getObjects().slice();
           fc.discardActiveObject();
+          // Remove individual objects from canvas
+          objects.forEach((o) => fc.remove(o));
+          // Create a new group from copies of those objects
+          const group = new fabric.Group(objects, {
+            left: activeSelection.left,
+            top: activeSelection.top,
+          });
+          fc.add(group);
           fc.setActiveObject(group);
           fc.renderAll();
           saveHistory();
+          onSelectionChange(group);
         },
         ungroupSelected: () => {
           const fc = fcRef.current;
@@ -557,12 +568,43 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           const active = fc.getActiveObject();
           if (!active || active.type !== 'group') return;
           const group = active as fabric.Group;
-          const items = group.getObjects();
+          // Get the group's transform to apply to children
+          const groupScaleX = group.scaleX || 1;
+          const groupScaleY = group.scaleY || 1;
+          const groupAngle = group.angle || 0;
+          const items = group.getObjects().slice();
+          // Remove the group from canvas
           fc.remove(group);
-          group.removeAll();
-          items.forEach((o) => fc.add(o));
+          // Add each item back with correct absolute position
+          const addedItems: fabric.FabricObject[] = [];
+          items.forEach((item) => {
+            // Calculate absolute position from group-relative coordinates
+            const point = fabric.util.transformPoint(
+              new fabric.Point(item.left || 0, item.top || 0),
+              group.calcTransformMatrix(),
+            );
+            item.set({
+              left: point.x,
+              top: point.y,
+              scaleX: (item.scaleX || 1) * groupScaleX,
+              scaleY: (item.scaleY || 1) * groupScaleY,
+              angle: (item.angle || 0) + groupAngle,
+            });
+            item.setCoords();
+            fc.add(item);
+            addedItems.push(item);
+          });
+          fc.discardActiveObject();
+          // Select all ungrouped items
+          if (addedItems.length > 1) {
+            const sel = new fabric.ActiveSelection(addedItems, { canvas: fc });
+            fc.setActiveObject(sel);
+          } else if (addedItems.length === 1) {
+            fc.setActiveObject(addedItems[0]);
+          }
           fc.renderAll();
           saveHistory();
+          onSelectionChange(fc.getActiveObject() || null);
         },
         setBackgroundColor: (color: string) => {
           const fc = fcRef.current;
