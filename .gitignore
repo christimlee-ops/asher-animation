@@ -26,6 +26,12 @@ dist-ssr
 # Environment
 .env
 .env.local
-screenshot.png
-server/animatekids.db
 server/.env
+server/animatekids.db
+server/uploads/
+
+# Screenshots
+screenshot*.png
+
+# Temp files
+tmp_*.json

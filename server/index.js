@@ -8,19 +8,24 @@ const dbReady = require('./db');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// CORS
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  credentials: true
-}));
+// CORS — only needed in dev (in production, frontend is served from same origin)
+if (process.env.NODE_ENV !== 'production') {
+  app.use(cors({
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    credentials: true
+  }));
+}
 
 // Body parsing with 50mb limit for project data
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// X-Robots-Tag on all responses
+// Security / meta headers
 app.use((req, res, next) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+  // Required for SharedArrayBuffer (FFmpeg video export)
+  res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   next();
 });
 
@@ -45,6 +50,18 @@ dbReady.then((db) => {
     res.json({ status: 'ok' });
   });
 
+  // Serve Vite-built frontend in production
+  if (process.env.NODE_ENV === 'production') {
+    const distPath = path.join(__dirname, '..', 'dist');
+    app.use(express.static(distPath));
+    // SPA fallback — serve index.html for any non-API route
+    app.get('*', (req, res) => {
+      if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(distPath, 'index.html'));
+      }
+    });
+  }
+
   // Global error handler
   app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
@@ -52,7 +69,7 @@ dbReady.then((db) => {
   });
 
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT} [${process.env.NODE_ENV || 'development'}]`);
   });
 }).catch((err) => {
   console.error('Failed to initialize database:', err);

@@ -50,7 +50,7 @@ export default function SignupPage() {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <h1 style={styles.title}>AnimateKids</h1>
+        <h1 style={styles.title}>Ashermate</h1>
 
         {/* Decorative stars */}
         <div style={{ textAlign: 'center', margin: '4px 0 8px' }}>

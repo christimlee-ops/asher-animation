@@ -30,7 +30,7 @@ export default function ColorPicker({ color, onChange, label }: ColorPickerProps
   const [hexInput, setHexInput] = useState(color);
   const [recentColors, setRecentColors] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem('animatekids_recent_colors');
+      const saved = localStorage.getItem('ashermate_recent_colors');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -45,7 +45,7 @@ export default function ColorPicker({ color, onChange, label }: ColorPickerProps
     setRecentColors((prev) => {
       const filtered = prev.filter((rc) => rc.toLowerCase() !== c.toLowerCase());
       const next = [c, ...filtered].slice(0, 8);
-      localStorage.setItem('animatekids_recent_colors', JSON.stringify(next));
+      localStorage.setItem('ashermate_recent_colors', JSON.stringify(next));
       return next;
     });
   };
@@ -150,6 +150,27 @@ export default function ColorPicker({ color, onChange, label }: ColorPickerProps
         ))}
       </div>
       <div style={styles.hexRow}>
+        <input
+          type="color"
+          value={color.length === 7 ? color : '#000000'}
+          onChange={(e) => {
+            const c = e.target.value;
+            setHexInput(c);
+            onChange(c);
+            addToRecent(c);
+          }}
+          style={{
+            width: '36px',
+            height: '32px',
+            padding: '0',
+            border: `2px solid ${color}`,
+            borderRadius: '8px',
+            cursor: 'pointer',
+            backgroundColor: 'transparent',
+            flexShrink: 0,
+          }}
+          title="Open color picker"
+        />
         <input
           style={styles.hexInput}
           value={hexInput}

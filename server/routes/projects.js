@@ -87,7 +87,7 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'No fields to update' });
     }
 
-    updates.push("updated_at = datetime('now')");
+    updates.push(process.env.DB_TYPE === 'mysql' ? "updated_at = NOW()" : "updated_at = datetime('now')");
     values.push(req.params.id, req.user.id);
 
     await req.db.execute(
