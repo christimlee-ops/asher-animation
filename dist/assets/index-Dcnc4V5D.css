@@ -1,0 +1,1 @@
+*,*:before,*:after{box-sizing:border-box;margin:0;padding:0}html,body,#root{min-height:100vh;width:100%}body{font-family:Comic Sans MS,Chalkboard SE,cursive;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}html,body{overscroll-behavior:none}canvas.upper-canvas,canvas.lower-canvas{touch-action:none}
