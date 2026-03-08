@@ -63,6 +63,11 @@ const mimeTypes = {
 
 // Serve Vite-built frontend
 const distPath = path.join(__dirname, 'dist');
+console.log('dist path:', distPath, 'exists:', fs.existsSync(distPath));
+if (fs.existsSync(distPath)) {
+  console.log('dist contents:', fs.readdirSync(distPath).join(', '));
+}
+
 app.use(express.static(distPath, {
   setHeaders: (res, filePath) => {
     const ext = path.extname(filePath).toLowerCase();
@@ -72,40 +77,66 @@ app.use(express.static(distPath, {
   },
 }));
 
-// Wait for DB, then mount API routes
+// Debug endpoint
+app.get('/api/debug', (req, res) => {
+  const indexPath = path.join(distPath, 'index.html');
+  res.json({
+    distPath,
+    distExists: fs.existsSync(distPath),
+    indexExists: fs.existsSync(indexPath),
+    dirname: __dirname,
+    distContents: fs.existsSync(distPath) ? fs.readdirSync(distPath) : [],
+    env: process.env.NODE_ENV,
+  });
+});
+
+// DB-dependent middleware: store db reference once ready
+let dbRef = null;
 dbReady.then((db) => {
-  app.use((req, res, next) => {
-    req.db = db;
-    next();
-  });
-
-  app.use('/api/auth', require('./server/routes/auth'));
-  app.use('/api/projects', require('./server/routes/projects'));
-  app.use('/api/assets', require('./server/routes/assets'));
-
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' });
-  });
-
-  // SPA fallback
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.setHeader('Content-Type', 'text/html');
-      res.sendFile(path.join(distPath, 'index.html'));
-    }
-  });
-
-  app.use((err, req, res, next) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ error: 'Internal server error' });
-  });
-
-  // Start server — use PORT from Passenger or fallback
-  const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
-  });
+  dbRef = db;
+  console.log('Database connected');
 }).catch((err) => {
   console.error('Failed to initialize database:', err);
-  process.exit(1);
+});
+
+// Make db available to routes (waits for connection)
+app.use((req, res, next) => {
+  if (!dbRef && req.path.startsWith('/api')) {
+    return res.status(503).json({ error: 'Database not ready' });
+  }
+  req.db = dbRef;
+  next();
+});
+
+// API routes
+app.use('/api/auth', require('./server/routes/auth'));
+app.use('/api/projects', require('./server/routes/projects'));
+app.use('/api/assets', require('./server/routes/assets'));
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', dbReady: !!dbRef });
+});
+
+// SPA fallback — must be after API routes
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    const indexPath = path.join(distPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.setHeader('Content-Type', 'text/html');
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).send('index.html not found at ' + indexPath);
+    }
+  }
+});
+
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
 });
