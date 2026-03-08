@@ -27,7 +27,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   const username =
-    user?.user_metadata?.username ?? user?.email?.split('@')[0] ?? 'Artist';
+    user?.username ?? user?.email?.split('@')[0] ?? 'Artist';
 
   // Fetch projects on mount
   useEffect(() => {

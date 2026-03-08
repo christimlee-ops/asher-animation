@@ -107,7 +107,7 @@ export default function TopBar({
   };
 
   const displayName =
-    user?.user_metadata?.username || user?.email?.split('@')[0] || 'Guest';
+    user?.username || user?.email?.split('@')[0] || 'Guest';
 
   return (
     <div style={styles.bar}>

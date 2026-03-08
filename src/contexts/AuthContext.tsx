@@ -5,8 +5,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { User, Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { apiGet, apiPost } from '../lib/api';
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -23,78 +28,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // On mount, check for existing token and validate it
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    const token =
+      localStorage.getItem('auth_token') ?? sessionStorage.getItem('auth_token');
 
-    // Listen to auth state changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
-      setUser(session?.user ?? null);
+    if (!token) {
       setLoading(false);
-    });
+      return;
+    }
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    apiGet<User>('/auth/me')
+      .then((u) => setUser(u))
+      .catch(() => {
+        // Token is invalid – clear it
+        localStorage.removeItem('auth_token');
+        sessionStorage.removeItem('auth_token');
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   async function login(email: string, password: string, rememberMe: boolean) {
-    // If rememberMe is false we still sign in but store a flag so the session
-    // can be cleared when the browser/tab closes.
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { token, user: u } = await apiPost<{ token: string; user: User }>(
+      '/auth/login',
+      { email, password },
+    );
 
-    if (error) throw error;
-
-    if (!rememberMe) {
-      // Mark the session as ephemeral so we can clear it on unload
-      sessionStorage.setItem('animatekids_ephemeral', '1');
+    if (rememberMe) {
+      localStorage.setItem('auth_token', token);
+      sessionStorage.removeItem('auth_token');
     } else {
-      sessionStorage.removeItem('animatekids_ephemeral');
+      sessionStorage.setItem('auth_token', token);
+      localStorage.removeItem('auth_token');
     }
+
+    setUser(u);
   }
 
   async function signup(username: string, email: string, password: string) {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { username },
-      },
-    });
-
-    if (error) throw error;
+    await apiPost('/auth/signup', { username, email, password });
   }
 
   async function logout() {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    sessionStorage.removeItem('animatekids_ephemeral');
+    localStorage.removeItem('auth_token');
+    sessionStorage.removeItem('auth_token');
+    setUser(null);
+    window.location.href = '/login';
   }
 
   async function resetPassword(email: string) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    if (error) throw error;
+    await apiPost('/auth/forgot-password', { email });
   }
-
-  // Clear session on browser close if "Remember Me" was not checked
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (sessionStorage.getItem('animatekids_ephemeral') === '1') {
-        supabase.auth.signOut();
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signup, logout, resetPassword }}>

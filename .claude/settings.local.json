@@ -5,7 +5,10 @@
       "Bash(npx:*)",
       "Bash(cp:*)",
       "Bash(npm install:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(gh repo:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(curl:*)"
     ]
   }
 }
