@@ -5,15 +5,18 @@ import type { Project } from '../types/animation';
 
 export async function saveProject(project: Project): Promise<Project> {
   if (project.id) {
-    return apiPut<Project>(`/projects/${project.id}`, project);
+    const res = await apiPut<{ project: Project }>(`/projects/${project.id}`, project);
+    return res.project ?? project;
   }
-  return apiPost<Project>('/projects', project);
+  const res = await apiPost<{ project: Project }>('/projects', project);
+  return res.project;
 }
 
 // ─── Load ─────────────────────────────────────────────────────────
 
 export async function loadProject(id: string): Promise<Project> {
-  return apiGet<Project>(`/projects/${id}`);
+  const res = await apiGet<{ project: Project }>(`/projects/${id}`);
+  return res.project;
 }
 
 // ─── List ─────────────────────────────────────────────────────────
@@ -25,7 +28,8 @@ export interface ProjectListItem {
 }
 
 export async function listProjects(_userId?: string): Promise<ProjectListItem[]> {
-  return apiGet<ProjectListItem[]>('/projects');
+  const res = await apiGet<{ projects: ProjectListItem[] }>('/projects');
+  return res.projects;
 }
 
 // ─── Delete ───────────────────────────────────────────────────────

@@ -3,10 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-
-const authRoutes = require('./routes/auth');
-const projectRoutes = require('./routes/projects');
-const assetRoutes = require('./routes/assets');
+const dbReady = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,22 +27,34 @@ app.use((req, res, next) => {
 // Static file serving for uploaded assets
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/projects', projectRoutes);
-app.use('/api/assets', assetRoutes);
+// Wait for DB, then attach to req and mount routes
+dbReady.then((db) => {
+  // Make db available to routes
+  app.use((req, res, next) => {
+    req.db = db;
+    next();
+  });
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
+  // Routes
+  app.use('/api/auth', require('./routes/auth'));
+  app.use('/api/projects', require('./routes/projects'));
+  app.use('/api/assets', require('./routes/assets'));
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+  // Health check
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok' });
+  });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  // Global error handler
+  app.use((err, req, res, next) => {
+    console.error('Unhandled error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}).catch((err) => {
+  console.error('Failed to initialize database:', err);
+  process.exit(1);
 });

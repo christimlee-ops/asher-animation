@@ -38,8 +38,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    apiGet<User>('/auth/me')
-      .then((u) => setUser(u))
+    apiGet<{ user: User }>('/auth/me')
+      .then((res) => setUser(res.user))
       .catch(() => {
         // Token is invalid – clear it
         localStorage.removeItem('auth_token');

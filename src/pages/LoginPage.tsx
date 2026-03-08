@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const MAX_ATTEMPTS = 5;
@@ -156,14 +156,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={styles.links}>
-          <Link to="/signup" style={styles.link}>
-            Create an Account
-          </Link>
-          <Link to="/forgot-password" style={styles.link}>
-            Forgot Password?
-          </Link>
-        </div>
       </div>
     </div>
   );
@@ -277,16 +269,5 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: 0.5,
     boxShadow: '0 4px 14px rgba(255,107,107,0.4)',
     transition: 'transform 0.1s',
-  },
-  links: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    marginTop: 18,
-  },
-  link: {
-    color: '#4ECDC4',
-    fontWeight: 'bold',
-    textDecoration: 'none',
-    fontSize: '0.95rem',
   },
 };

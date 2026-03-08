@@ -8,7 +8,11 @@
       "Bash(npm run:*)",
       "Bash(gh repo:*)",
       "WebFetch(domain:localhost)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "mcp__ide__executeCode",
+      "Bash(node:*)",
+      "Bash(mysql:*)",
+      "Bash(rm:*)"
     ]
   }
 }
