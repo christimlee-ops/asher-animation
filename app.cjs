@@ -4,13 +4,17 @@
 const path = require('path');
 const fs = require('fs');
 
-// Load .env from server/ or project root
-const serverEnv = path.join(__dirname, 'server', '.env');
-const rootEnv = path.join(__dirname, '.env');
-require('dotenv').config({ path: fs.existsSync(serverEnv) ? serverEnv : rootEnv });
+// Resolve modules from server/node_modules since deps live there
+const serverDir = path.join(__dirname, 'server');
+const resolve = (mod) => require(require.resolve(mod, { paths: [serverDir] }));
 
-const express = require('express');
-const cors = require('cors');
+// Load .env from server/ or project root
+const serverEnv = path.join(serverDir, '.env');
+const rootEnv = path.join(__dirname, '.env');
+resolve('dotenv').config({ path: fs.existsSync(serverEnv) ? serverEnv : rootEnv });
+
+const express = resolve('express');
+const cors = resolve('cors');
 const dbReady = require('./server/db');
 
 const app = express();
