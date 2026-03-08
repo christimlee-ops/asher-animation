@@ -116,6 +116,23 @@ app.use((req, res, next) => {
   next();
 });
 
+// Debug: test login flow
+app.get('/api/debug-login', async (req, res) => {
+  try {
+    const [rows] = await dbRef.execute(
+      'SELECT id, username, email, password_hash FROM users WHERE LOWER(username) = ?',
+      ['asher']
+    );
+    res.json({
+      userFound: rows.length > 0,
+      user: rows[0] ? { id: rows[0].id, username: rows[0].username, email: rows[0].email, hashLength: rows[0].password_hash?.length } : null,
+      jwtSecretSet: !!process.env.JWT_SECRET,
+    });
+  } catch (err) {
+    res.json({ error: err.message, stack: err.stack });
+  }
+});
+
 // API routes
 app.use('/api/auth', require('./server/routes/auth'));
 app.use('/api/projects', require('./server/routes/projects'));
