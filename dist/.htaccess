@@ -1,4 +1,3 @@
-# MIME types for module scripts
 AddType application/javascript .js .mjs
 AddType text/css .css
 AddType text/html .html
@@ -12,16 +11,3 @@ AddType application/wasm .wasm
 AddType font/woff2 .woff2
 AddType font/woff .woff
 AddType font/ttf .ttf
-
-# Required for SharedArrayBuffer (FFmpeg)
-<IfModule mod_headers.c>
-  Header set Cross-Origin-Embedder-Policy "credentialless"
-  Header set Cross-Origin-Opener-Policy "same-origin"
-  Header set X-Robots-Tag "noindex, nofollow"
-</IfModule>
-
-# Proxy all requests to Node.js app if mod_proxy is available
-<IfModule mod_proxy.c>
-  RewriteEngine On
-  RewriteRule ^(.*)$ http://127.0.0.1:%{ENV:PASSENGER_BASE_PORT}/$1 [P,L]
-</IfModule>
