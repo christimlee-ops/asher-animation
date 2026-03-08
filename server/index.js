@@ -52,16 +52,39 @@ dbReady.then((db) => {
 
   // Serve Vite-built frontend in production
   if (process.env.NODE_ENV === 'production') {
+    const fs = require('fs');
     const distPath = path.join(__dirname, '..', 'dist');
+    console.log('Serving static files from:', distPath);
+    console.log('dist/ exists:', fs.existsSync(distPath));
+    if (fs.existsSync(distPath)) {
+      console.log('dist/ contents:', fs.readdirSync(distPath).join(', '));
+    }
+
+    // MIME type map for static files
+    const mimeTypes = {
+      '.js': 'application/javascript',
+      '.mjs': 'application/javascript',
+      '.css': 'text/css',
+      '.html': 'text/html',
+      '.json': 'application/json',
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.wasm': 'application/wasm',
+      '.woff2': 'font/woff2',
+      '.woff': 'font/woff',
+      '.ttf': 'font/ttf',
+    };
+
     app.use(express.static(distPath, {
       setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
-        else if (filePath.endsWith('.css')) res.setHeader('Content-Type', 'text/css');
-        else if (filePath.endsWith('.html')) res.setHeader('Content-Type', 'text/html');
-        else if (filePath.endsWith('.json')) res.setHeader('Content-Type', 'application/json');
-        else if (filePath.endsWith('.svg')) res.setHeader('Content-Type', 'image/svg+xml');
-        else if (filePath.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
-        else if (filePath.endsWith('.wasm')) res.setHeader('Content-Type', 'application/wasm');
+        const ext = path.extname(filePath).toLowerCase();
+        if (mimeTypes[ext]) {
+          res.setHeader('Content-Type', mimeTypes[ext]);
+        }
       },
     }));
     // SPA fallback — serve index.html for any non-API route
