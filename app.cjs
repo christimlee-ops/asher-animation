@@ -1,25 +1,21 @@
 // Passenger-compatible entry point for Plesk Node.js hosting
-// Passenger requires the startup file at the Application Root
+// .cjs extension required because root package.json has "type": "module"
 
-// Try .env from server/ first, then project root
-const dotenvPath = require('path');
+const path = require('path');
 const fs = require('fs');
-const serverEnv = dotenvPath.join(__dirname, 'server', '.env');
-const rootEnv = dotenvPath.join(__dirname, '.env');
-if (fs.existsSync(serverEnv)) {
-  require('dotenv').config({ path: serverEnv });
-} else {
-  require('dotenv').config({ path: rootEnv });
-}
+
+// Load .env from server/ or project root
+const serverEnv = path.join(__dirname, 'server', '.env');
+const rootEnv = path.join(__dirname, '.env');
+require('dotenv').config({ path: fs.existsSync(serverEnv) ? serverEnv : rootEnv });
 
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const dbReady = require('./server/db');
 
 const app = express();
 
-// CORS — only needed in dev (in production, frontend is served from same origin)
+// CORS — only needed in dev
 if (process.env.NODE_ENV !== 'production') {
   app.use(cors({
     origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -34,7 +30,6 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Security / meta headers
 app.use((req, res, next) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-  // Required for SharedArrayBuffer (FFmpeg video export)
   res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   next();
@@ -43,7 +38,7 @@ app.use((req, res, next) => {
 // Static file serving for uploaded assets
 app.use('/uploads', express.static(path.join(__dirname, 'server', 'uploads')));
 
-// MIME type map for static files
+// MIME type map
 const mimeTypes = {
   '.js': 'application/javascript',
   '.mjs': 'application/javascript',
@@ -88,7 +83,7 @@ dbReady.then((db) => {
     res.json({ status: 'ok' });
   });
 
-  // SPA fallback — serve index.html for any non-API route
+  // SPA fallback
   app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
       res.setHeader('Content-Type', 'text/html');
@@ -101,18 +96,11 @@ dbReady.then((db) => {
     res.status(500).json({ error: 'Internal server error' });
   });
 
-  // Detect if running under Passenger or standalone
-  if (typeof(PhusionPassenger) !== 'undefined') {
-    PhusionPassenger.configure({ autoInstall: false });
-    app.listen('passenger', () => {
-      console.log('App running under Phusion Passenger');
-    });
-  } else {
-    const PORT = process.env.PORT || 3001;
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT} [${process.env.NODE_ENV || 'development'}]`);
-    });
-  }
+  // Start server — use PORT from Passenger or fallback
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`);
+  });
 }).catch((err) => {
   console.error('Failed to initialize database:', err);
   process.exit(1);
