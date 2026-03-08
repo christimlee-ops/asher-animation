@@ -96,12 +96,12 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div style={styles.fieldGroup}>
-            <label style={styles.label}>Email / Username</label>
+            <label style={styles.label}>Username</label>
             <input
               type="text"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
+              placeholder="Your username"
               required
               style={styles.input}
             />

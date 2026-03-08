@@ -18,26 +18,27 @@ const loginLimiter = rateLimit({
 // POST /login
 router.post('/login', loginLimiter, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email: loginId, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required' });
+    if (!loginId || !password) {
+      return res.status(400).json({ error: 'Username and password are required' });
     }
 
+    // Look up by username (case-insensitive) or email
     const [rows] = await req.db.execute(
-      'SELECT id, username, email, password_hash FROM users WHERE email = ?',
-      [email.toLowerCase()]
+      'SELECT id, username, email, password_hash FROM users WHERE LOWER(username) = ? OR LOWER(email) = ?',
+      [loginId.toLowerCase(), loginId.toLowerCase()]
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     const user = rows[0];
 
     const valid = await bcrypt.compare(password, user.password_hash);
     if (!valid) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      return res.status(401).json({ error: 'Invalid username or password' });
     }
 
     const token = jwt.sign(
