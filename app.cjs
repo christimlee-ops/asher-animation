@@ -78,6 +78,7 @@ app.use(express.static(distPath, {
 }));
 
 // Debug endpoint
+let dbError = null;
 app.get('/api/debug', (req, res) => {
   const indexPath = path.join(distPath, 'index.html');
   res.json({
@@ -87,6 +88,12 @@ app.get('/api/debug', (req, res) => {
     dirname: __dirname,
     distContents: fs.existsSync(distPath) ? fs.readdirSync(distPath) : [],
     env: process.env.NODE_ENV,
+    dbConnected: !!dbRef,
+    dbError: dbError ? dbError.message : null,
+    dbType: process.env.DB_TYPE || 'sqlite',
+    dbHost: process.env.DB_HOST || 'not set',
+    dbName: process.env.DB_NAME || 'not set',
+    envFile: fs.existsSync(path.join(__dirname, 'server', '.env')) ? 'server/.env' : fs.existsSync(path.join(__dirname, '.env')) ? '.env' : 'none found',
   });
 });
 
@@ -96,6 +103,7 @@ dbReady.then((db) => {
   dbRef = db;
   console.log('Database connected');
 }).catch((err) => {
+  dbError = err;
   console.error('Failed to initialize database:', err);
 });
 
