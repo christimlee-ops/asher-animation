@@ -53,10 +53,21 @@ dbReady.then((db) => {
   // Serve Vite-built frontend in production
   if (process.env.NODE_ENV === 'production') {
     const distPath = path.join(__dirname, '..', 'dist');
-    app.use(express.static(distPath));
+    app.use(express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
+        else if (filePath.endsWith('.css')) res.setHeader('Content-Type', 'text/css');
+        else if (filePath.endsWith('.html')) res.setHeader('Content-Type', 'text/html');
+        else if (filePath.endsWith('.json')) res.setHeader('Content-Type', 'application/json');
+        else if (filePath.endsWith('.svg')) res.setHeader('Content-Type', 'image/svg+xml');
+        else if (filePath.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
+        else if (filePath.endsWith('.wasm')) res.setHeader('Content-Type', 'application/wasm');
+      },
+    }));
     // SPA fallback — serve index.html for any non-API route
     app.get('*', (req, res) => {
       if (!req.path.startsWith('/api')) {
+        res.setHeader('Content-Type', 'text/html');
         res.sendFile(path.join(distPath, 'index.html'));
       }
     });
