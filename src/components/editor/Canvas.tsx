@@ -545,17 +545,16 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         groupSelected: () => {
           const fc = fcRef.current;
           if (!fc) return;
-          const activeSelection = fc.getActiveObject();
-          if (!activeSelection || activeSelection.type !== 'activeSelection') return;
-          const objects = (activeSelection as fabric.ActiveSelection).getObjects().slice();
+          const active = fc.getActiveObject();
+          if (!active) return;
+          // Check if it's an ActiveSelection (multiple objects selected)
+          const isMultiSelect = active instanceof fabric.ActiveSelection;
+          if (!isMultiSelect) return;
+          const objects = (active as fabric.ActiveSelection).getObjects().slice();
+          if (objects.length < 2) return;
           fc.discardActiveObject();
-          // Remove individual objects from canvas
           objects.forEach((o) => fc.remove(o));
-          // Create a new group from copies of those objects
-          const group = new fabric.Group(objects, {
-            left: activeSelection.left,
-            top: activeSelection.top,
-          });
+          const group = new fabric.Group(objects);
           fc.add(group);
           fc.setActiveObject(group);
           fc.renderAll();
@@ -566,36 +565,30 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           const fc = fcRef.current;
           if (!fc) return;
           const active = fc.getActiveObject();
-          if (!active || active.type !== 'group') return;
+          if (!active || !(active instanceof fabric.Group) || active instanceof fabric.ActiveSelection) return;
           const group = active as fabric.Group;
-          // Get the group's transform to apply to children
-          const groupScaleX = group.scaleX || 1;
-          const groupScaleY = group.scaleY || 1;
-          const groupAngle = group.angle || 0;
+          const matrix = group.calcTransformMatrix();
           const items = group.getObjects().slice();
-          // Remove the group from canvas
           fc.remove(group);
-          // Add each item back with correct absolute position
           const addedItems: fabric.FabricObject[] = [];
           items.forEach((item) => {
-            // Calculate absolute position from group-relative coordinates
+            // Transform child's center point through the group's matrix
             const point = fabric.util.transformPoint(
               new fabric.Point(item.left || 0, item.top || 0),
-              group.calcTransformMatrix(),
+              matrix,
             );
             item.set({
               left: point.x,
               top: point.y,
-              scaleX: (item.scaleX || 1) * groupScaleX,
-              scaleY: (item.scaleY || 1) * groupScaleY,
-              angle: (item.angle || 0) + groupAngle,
+              scaleX: (item.scaleX || 1) * (group.scaleX || 1),
+              scaleY: (item.scaleY || 1) * (group.scaleY || 1),
+              angle: (item.angle || 0) + (group.angle || 0),
             });
             item.setCoords();
             fc.add(item);
             addedItems.push(item);
           });
           fc.discardActiveObject();
-          // Select all ungrouped items
           if (addedItems.length > 1) {
             const sel = new fabric.ActiveSelection(addedItems, { canvas: fc });
             fc.setActiveObject(sel);

@@ -48,7 +48,6 @@ export default function PropertiesPanel({
   darkMode,
   onSaveHistory,
 }: PropertiesPanelProps) {
-  const [rotation, setRotation] = useState(0);
   const [opacity, setOpacity] = useState(100);
   const [fillColor, setFillColor] = useState('#000000');
   const [strokeColorVal, setStrokeColorVal] = useState('#000000');
@@ -61,7 +60,6 @@ export default function PropertiesPanel({
 
   const syncFromObject = useCallback((obj: fabric.FabricObject | null) => {
     if (!obj) return;
-    setRotation(Math.round(obj.angle || 0));
     setOpacity(Math.round((obj.opacity ?? 1) * 100));
     const fill = obj.fill;
     setFillColor(typeof fill === 'string' ? fill : '#000000');
@@ -387,25 +385,6 @@ export default function PropertiesPanel({
             />
           </div>
 
-          {/* Rotation */}
-          <div style={styles.section}>
-            <div style={styles.sectionLabel}>Rotation</div>
-            <div style={styles.row}>
-              <input
-                style={styles.input}
-                type="number"
-                value={rotation}
-                min={0}
-                max={360}
-                onChange={(e) => {
-                  const v = Number(e.target.value) % 360;
-                  setRotation(v);
-                  applyProp(() => selectedObject.set({ angle: v }));
-                }}
-              />
-              <span style={{ fontSize: '13px', fontWeight: 600 }}>deg</span>
-            </div>
-          </div>
 
           {/* Opacity */}
           <div style={styles.section}>
