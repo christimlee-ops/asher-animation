@@ -69,12 +69,12 @@ const TOOLS: { name: ToolName; label: string }[] = [
 ];
 
 const ACTIONS: { name: ActionName; label: string }[] = [
+  { name: 'flipH', label: 'Flip Horizontal' },
+  { name: 'flipV', label: 'Flip Vertical' },
   { name: 'eraser', label: 'Delete' },
   { name: 'group', label: 'Group' },
   { name: 'ungroup', label: 'Ungroup' },
   { name: 'duplicate', label: 'Duplicate' },
-  { name: 'flipH', label: 'Flip Horizontal' },
-  { name: 'flipV', label: 'Flip Vertical' },
 ];
 
 export default function ToolsPanel({
@@ -126,15 +126,14 @@ export default function ToolsPanel({
           </button>
         ))}
         <div style={{ width: '1px', height: '24px', backgroundColor: sectionBorder, flexShrink: 0, margin: '0 2px' }} />
+        <button style={compactBtn(false)} onClick={onOpenLibrary} title="Media Library">
+          <Icon><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></Icon>
+        </button>
         {ACTIONS.map((a) => (
           <button key={a.name} style={compactBtn(false)} onClick={() => onAction(a.name)} title={a.label}>
             {ACTION_ICONS[a.name]}
           </button>
         ))}
-        <div style={{ width: '1px', height: '24px', backgroundColor: sectionBorder, flexShrink: 0, margin: '0 2px' }} />
-        <button style={compactBtn(false)} onClick={onOpenLibrary} title="Media Library">
-          <Icon><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></Icon>
-        </button>
       </div>
     );
   }
@@ -237,6 +236,18 @@ export default function ToolsPanel({
 
       {/* Actions */}
       <div style={styles.sectionTitle}>Actions</div>
+      <button
+        style={styles.actionBtn}
+        onClick={onOpenLibrary}
+        title="Open Media Library"
+        onMouseEnter={hoverAction}
+        onMouseLeave={unhoverAction}
+      >
+        <span style={styles.toolIcon}>
+          <Icon><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></Icon>
+        </span>
+        <span>Media Library</span>
+      </button>
       {ACTIONS.map((a) => (
         <button
           key={a.name}
@@ -250,18 +261,6 @@ export default function ToolsPanel({
           <span>{a.label}</span>
         </button>
       ))}
-      <button
-        style={styles.actionBtn}
-        onClick={onOpenLibrary}
-        title="Open Media Library"
-        onMouseEnter={hoverAction}
-        onMouseLeave={unhoverAction}
-      >
-        <span style={styles.toolIcon}>
-          <Icon><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></Icon>
-        </span>
-        <span>Media Library</span>
-      </button>
     </div>
   );
 }
