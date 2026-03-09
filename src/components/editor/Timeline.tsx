@@ -406,116 +406,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingKf, totalFrames, FRAME_W, animState, onAnimStateChange]);
 
-  // ─── Drag-and-drop layers into/out of groups ───────────────────
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const dragSourceId = useRef<string | null>(null);
-
-  const handleLayerDragStart = useCallback((e: React.DragEvent, row: TimelineRow) => {
-    const id = (row.obj as any)._animId;
-    dragSourceId.current = id;
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', id);
-  }, []);
-
-  const handleLayerDragOver = useCallback((e: React.DragEvent, row: TimelineRow) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    const id = (row.obj as any)._animId;
-    if (id !== dragSourceId.current) {
-      setDragOverId(id);
-    }
-  }, []);
-
-  const handleLayerDragLeave = useCallback(() => {
-    setDragOverId(null);
-  }, []);
-
-  const handleLayerDrop = useCallback((e: React.DragEvent, targetRow: TimelineRow) => {
-    e.preventDefault();
-    setDragOverId(null);
-    if (!canvas) return;
-    const sourceId = dragSourceId.current;
-    dragSourceId.current = null;
-    if (!sourceId) return;
-
-    const targetId = (targetRow.obj as any)._animId;
-    if (sourceId === targetId) return;
-
-    // Find source object
-    const findObj = (objs: fabric.FabricObject[], parent: fabric.Group | null): { obj: fabric.FabricObject; parent: fabric.Group | null } | null => {
-      for (const o of objs) {
-        if ((o as any)._animId === sourceId) return { obj: o, parent };
-        if (o instanceof fabric.Group && !(o instanceof fabric.ActiveSelection)) {
-          const found = findObj(o.getObjects(), o);
-          if (found) return found;
-        }
-      }
-      return null;
-    };
-
-    const source = findObj(canvas.getObjects(), null);
-    if (!source) return;
-
-    const isTargetGroup = targetRow.obj instanceof fabric.Group && !(targetRow.obj instanceof fabric.ActiveSelection);
-
-    if (isTargetGroup && targetRow.obj !== source.parent) {
-      // Drop onto a group — add source to that group
-      const targetGroup = targetRow.obj as fabric.Group;
-
-      // Get source's absolute position on canvas
-      const srcAbsMatrix = source.obj.calcTransformMatrix();
-      const srcCenter = new fabric.Point(srcAbsMatrix[4], srcAbsMatrix[5]);
-
-      // Remove source from its current location
-      if (source.parent) {
-        source.parent.remove(source.obj);
-        source.parent.dirty = true;
-        source.parent.setCoords();
-        try { (source.parent as any)._calcBounds(); } catch (_) {}
-      } else {
-        canvas.remove(source.obj);
-      }
-
-      // Convert absolute position to the target group's local space
-      const groupMatrix = targetGroup.calcTransformMatrix();
-      const invGroupMatrix = fabric.util.invertTransform(groupMatrix);
-      const localPoint = fabric.util.transformPoint(srcCenter, invGroupMatrix);
-
-      source.obj.left = localPoint.x;
-      source.obj.top = localPoint.y;
-      source.obj.setCoords();
-
-      targetGroup.add(source.obj);
-      targetGroup.dirty = true;
-      targetGroup.setCoords();
-      try { (targetGroup as any)._calcBounds(); } catch (_) {}
-
-      canvas.discardActiveObject();
-      canvas.renderAll();
-      onAnimStateChange({ ...animState });
-      forceUpdate((n) => n + 1);
-    } else if (!isTargetGroup && source.parent) {
-      // Drag out of a group to top level
-      const srcAbsMatrix = source.obj.calcTransformMatrix();
-
-      source.parent.remove(source.obj);
-      source.parent.dirty = true;
-      source.parent.setCoords();
-      try { (source.parent as any)._calcBounds(); } catch (_) {}
-
-      // Restore absolute position
-      source.obj.left = srcAbsMatrix[4];
-      source.obj.top = srcAbsMatrix[5];
-      source.obj.setCoords();
-
-      canvas.add(source.obj);
-      canvas.discardActiveObject();
-      canvas.renderAll();
-      onAnimStateChange({ ...animState });
-      forceUpdate((n) => n + 1);
-    }
-  }, [canvas, animState, onAnimStateChange]);
-
   // ─── Exit group edit mode ────────────────────────────────────────
   const exitGroupEdit = useCallback(() => {
     if (editingGroup) {
@@ -750,12 +640,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                 <div
                   key={id}
                   data-timeline-id={id}
-                  draggable
                   onClick={() => selectTimelineLayer(row)}
-                  onDragStart={(e) => handleLayerDragStart(e, row)}
-                  onDragOver={(e) => handleLayerDragOver(e, row)}
-                  onDragLeave={handleLayerDragLeave}
-                  onDrop={(e) => handleLayerDrop(e, row)}
                   style={{
                     height: `${ROW_H}px`,
                     display: 'flex',
@@ -769,23 +654,19 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     color: isSelected ? accent : hasKf ? text : dimText,
-                    backgroundColor: dragOverId === id
-                      ? (darkMode ? 'rgba(78,205,196,0.3)' : 'rgba(78,205,196,0.2)')
-                      : isSelected
-                        ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.08)')
-                        : isEditingThisGroup
-                          ? (darkMode ? 'rgba(255,107,107,0.1)' : 'rgba(255,107,107,0.06)')
-                          : isChildOfEditingGroup
-                            ? (darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
-                            : 'transparent',
-                    cursor: 'grab',
-                    borderLeft: isSelected ? `2px solid ${accent}` : dragOverId === id ? `2px solid ${accent}` : '2px solid transparent',
+                    backgroundColor: isSelected
+                      ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.08)')
+                      : isEditingThisGroup
+                        ? (darkMode ? 'rgba(255,107,107,0.1)' : 'rgba(255,107,107,0.06)')
+                        : isChildOfEditingGroup
+                          ? (darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
+                          : 'transparent',
+                    cursor: 'pointer',
+                    borderLeft: isSelected ? `2px solid ${accent}` : '2px solid transparent',
                   }}
                   title={row.depth > 0
-                    ? `${getLabel(row.obj)} — drag to move, click to edit within group`
-                    : isGroup
-                      ? `${getLabel(row.obj)} — drag layers here to add to group`
-                      : `${getLabel(row.obj)} — drag onto a group, click to select`}
+                    ? `${getLabel(row.obj)} — click to edit within group`
+                    : `${getLabel(row.obj)} — click to select for keyframing`}
                 >
                   {isGroup ? (isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
                 </div>
