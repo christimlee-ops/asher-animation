@@ -370,7 +370,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         ctx.strokeStyle = '#FF6B6B';
         ctx.lineWidth = 3;
         ctx.setLineDash([12, 8]);
-        ctx.strokeRect(0, 0, CANVAS_W, CANVAS_H);
+        ctx.strokeRect(-4, -4, CANVAS_W + 8, CANVAS_H + 8);
 
         // Label above the border
         ctx.setLineDash([]);
