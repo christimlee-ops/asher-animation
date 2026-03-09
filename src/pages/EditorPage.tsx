@@ -74,7 +74,7 @@ export default function EditorPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${projectName || 'animation'}.mp4`;
+      a.download = `${projectName || 'animation'}.webm`;
       a.click();
       URL.revokeObjectURL(url);
       setExportStatus('');

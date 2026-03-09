@@ -1,28 +1,7 @@
-// ─── MP4 Export via FFmpeg.wasm ──────────────────────────────────
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { toBlobURL } from '@ffmpeg/util';
+// ─── Video Export via MediaRecorder (no WASM needed) ─────────────
 import * as fabric from 'fabric';
 import type { AnimationState } from './animationState';
 import { interpolateAtFrame } from './animationState';
-
-let ffmpeg: FFmpeg | null = null;
-
-async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
-  if (ffmpeg && ffmpeg.loaded) return ffmpeg;
-  ffmpeg = new FFmpeg();
-  if (onLog) {
-    ffmpeg.on('log', ({ message }) => onLog(message));
-  }
-  ffmpeg.on('progress', ({ progress }) => {
-    onLog?.(`Encoding: ${Math.round(progress * 100)}%`);
-  });
-  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-  // Use toBlobURL to avoid CORS issues with SharedArrayBuffer
-  const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-  const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-  await ffmpeg.load({ coreURL, wasmURL });
-  return ffmpeg;
-}
 
 export interface ExportOptions {
   canvas: fabric.Canvas;
@@ -42,13 +21,24 @@ export async function exportToMp4({
   const { fps, totalFrames, timelines } = animState;
   const log = onProgress || (() => {});
 
-  log('Capturing frames...');
-
-  // Create an offscreen canvas to render frames without affecting the visible canvas
+  // Create an offscreen canvas for recording
   const offscreen = document.createElement('canvas');
   offscreen.width = width;
   offscreen.height = height;
   const ctx = offscreen.getContext('2d')!;
+
+  // Set up MediaRecorder on the offscreen canvas stream
+  const stream = offscreen.captureStream(0); // 0 = manual frame control
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+    ? 'video/webm;codecs=vp9'
+    : 'video/webm';
+  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 5_000_000 });
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+  const recorderReady = new Promise<void>((resolve) => {
+    recorder.onstop = () => resolve();
+  });
 
   // Save original object states so we can restore them
   const originalStates: Map<string, Record<string, any>> = new Map();
@@ -68,7 +58,7 @@ export async function exportToMp4({
   };
   saveOriginalStates(canvas.getObjects());
 
-  // Save viewport
+  // Save viewport and dimensions
   const originalViewport = canvas.viewportTransform ? [...canvas.viewportTransform] : null;
   const originalWidth = canvas.getWidth();
   const originalHeight = canvas.getHeight();
@@ -103,33 +93,41 @@ export async function exportToMp4({
     }
   };
 
-  const frames: Uint8Array[] = [];
-
-  // Temporarily set viewport for clean capture, but we'll restore between captures
+  // Set viewport for clean capture
   canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
   canvas.setDimensions({ width, height });
+
+  log('Recording frames...');
+  recorder.start();
+
+  const frameDuration = 1000 / fps;
 
   for (let frame = 0; frame < totalFrames; frame++) {
     applyAnimToObjects(canvas.getObjects(), frame);
     canvas.discardActiveObject();
     canvas.renderAll();
 
-    // Draw the fabric canvas onto our offscreen canvas
+    // Draw the fabric canvas onto the recording canvas
     const srcCanvas = canvas.getElement();
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(srcCanvas, 0, 0, width, height);
 
-    // Convert to PNG blob
-    const blob = await new Promise<Blob>((resolve) => {
-      offscreen.toBlob((b) => resolve(b!), 'image/png');
-    });
-    const buf = new Uint8Array(await blob.arrayBuffer());
-    frames.push(buf);
+    // Request a frame from the stream at the right timing
+    const track = stream.getVideoTracks()[0];
+    if (track && 'requestFrame' in track) {
+      (track as any).requestFrame();
+    }
+
+    // Wait for frame duration to maintain correct timing
+    await new Promise((r) => setTimeout(r, frameDuration));
 
     if (frame % fps === 0) {
-      log(`Capturing frame ${frame + 1}/${totalFrames}`);
+      log(`Recording frame ${frame + 1}/${totalFrames}`);
     }
   }
+
+  recorder.stop();
+  await recorderReady;
 
   // Restore original object states
   const restoreStates = (objs: fabric.FabricObject[]) => {
@@ -159,37 +157,7 @@ export async function exportToMp4({
   canvas.setDimensions({ width: originalWidth, height: originalHeight });
   canvas.renderAll();
 
-  log('Loading encoder...');
-  const ff = await getFFmpeg(log);
-
-  // Write frames to FFmpeg virtual filesystem
-  for (let i = 0; i < frames.length; i++) {
-    const name = `frame${String(i).padStart(6, '0')}.png`;
-    await ff.writeFile(name, frames[i]);
-  }
-
-  log('Encoding video...');
-  await ff.exec([
-    '-framerate', String(fps),
-    '-i', 'frame%06d.png',
-    '-c:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    '-preset', 'fast',
-    '-crf', '23',
-    '-y',
-    'output.mp4',
-  ]);
-
-  const data = await ff.readFile('output.mp4');
-  const blob = new Blob([data as BlobPart], { type: 'video/mp4' });
-
-  // Cleanup virtual filesystem
-  for (let i = 0; i < frames.length; i++) {
-    const name = `frame${String(i).padStart(6, '0')}.png`;
-    await ff.deleteFile(name);
-  }
-  await ff.deleteFile('output.mp4');
-
+  const blob = new Blob(chunks, { type: mimeType });
   log('Export complete!');
   return blob;
 }
