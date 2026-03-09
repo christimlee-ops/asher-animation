@@ -275,7 +275,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     canvas.renderAll();
   }, [canvas, animState]);
 
-  // ─── Playback loop (stops at last keyframe) ───────────────────
+  // ─── Playback loop (loops back to start) ───────────────────
   useEffect(() => {
     if (!isPlaying) {
       if (playRef.current) cancelAnimationFrame(playRef.current);
@@ -299,11 +299,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
       if (elapsed >= frameDuration) {
         frame++;
         if (frame > lastKeyframeFrame) {
-          frame = lastKeyframeFrame;
-          setCurrentFrame(lastKeyframeFrame);
-          applyFrame(lastKeyframeFrame);
-          setIsPlaying(false);
-          return;
+          frame = 0;
         }
         setCurrentFrame(frame);
         applyFrame(frame);
@@ -504,14 +500,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
             if (isPlaying) {
               setIsPlaying(false);
             } else {
-              // If at or past the last keyframe, restart from beginning
-              if (currentFrame >= lastKeyframeFrame && lastKeyframeFrame > 0) {
-                scrubTo(0);
-                // Small delay so scrubTo applies before play starts
-                setTimeout(() => setIsPlaying(true), 0);
-              } else {
-                setIsPlaying(true);
-              }
+              setIsPlaying(true);
             }
           }}
           style={{ ...btnBase, backgroundColor: isPlaying ? kfColor : accent, color: '#fff' }}
