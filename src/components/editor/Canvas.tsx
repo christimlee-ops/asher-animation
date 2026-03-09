@@ -631,8 +631,8 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           left: drawStartRef.current.x,
           top: drawStartRef.current.y,
           fill: fillColor,
-          stroke: strokeColor,
-          strokeWidth: 2,
+          stroke: 'transparent',
+          strokeWidth: 0,
           selectable: false,
           evented: false,
         };
