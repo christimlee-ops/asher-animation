@@ -782,7 +782,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
           {/* Labels body — scrolls vertically in sync */}
           <div
             ref={labelColRef}
-            style={{ flex: 1, overflowY: 'hidden', overflowX: 'hidden' }}
+            style={{ flex: 1, overflowY: 'hidden', overflowX: 'hidden', position: 'relative' }}
           >
             {rows.map((row) => {
               const id = (row.obj as any)._animId;
