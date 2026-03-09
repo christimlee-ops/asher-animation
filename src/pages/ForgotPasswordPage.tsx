@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <h1 style={styles.title}>Ashermate</h1>
+        <h1 style={styles.title}>AnimateKids</h1>
 
         {/* Cute lock icon */}
         <svg width="72" height="72" viewBox="0 0 72 72" style={{ display: 'block', margin: '12px auto' }}>

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 
 interface TopBarProps {
@@ -7,15 +6,10 @@ interface TopBarProps {
   onNewProject: () => void;
   onOpen: () => void;
   onSave: () => void;
-  onSaveAs: () => void;
-  onExport: () => void;
-  exporting: boolean;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  projectName: string;
-  compact?: boolean;
 }
 
 export default function TopBar({
@@ -24,18 +18,12 @@ export default function TopBar({
   onNewProject,
   onOpen,
   onSave,
-  onSaveAs,
-  onExport,
-  exporting,
   onUndo,
   onRedo,
   canUndo,
   canRedo,
-  projectName,
-  compact = false,
 }: TopBarProps) {
   const { user, logout } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
 
   const bg = darkMode ? '#1a1a2e' : 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)';
   const textColor = '#fff';
@@ -121,104 +109,12 @@ export default function TopBar({
   const displayName =
     user?.username || user?.email?.split('@')[0] || 'Guest';
 
-  // ─── Compact (tablet) top bar ──────────────────────────────────
-
-  if (compact) {
-    const cBtn: React.CSSProperties = {
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: '38px',
-      height: '38px',
-      borderRadius: '10px',
-      border: 'none',
-      backgroundColor: darkMode ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.25)',
-      color: textColor,
-      fontSize: '18px',
-      cursor: 'pointer',
-      flexShrink: 0,
-    };
-    const cBtnDisabled: React.CSSProperties = { ...cBtn, opacity: 0.4, cursor: 'not-allowed' };
-
-    return (
-      <div style={{ ...styles.bar, minHeight: '48px', padding: '4px 8px', flexWrap: 'wrap', gap: '4px' }}>
-        {/* Logo */}
-        <span style={{ fontSize: '20px', fontWeight: 900, display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
-          🎨 <span style={{ fontSize: '16px' }}>{projectName}</span>
-        </span>
-
-        <div style={{ flex: 1 }} />
-
-        {/* Undo / Redo */}
-        <button style={canUndo ? cBtn : cBtnDisabled} onClick={onUndo} disabled={!canUndo} title="Undo">↩</button>
-        <button style={canRedo ? cBtn : cBtnDisabled} onClick={onRedo} disabled={!canRedo} title="Redo">↪</button>
-
-        {/* Menu toggle */}
-        <button style={cBtn} onClick={() => setMenuOpen(!menuOpen)} title="Menu">☰</button>
-        <button style={styles.toggleBtn} onClick={onToggleDarkMode} title="Toggle dark/light mode">
-          {darkMode ? '☀️' : '🌙'}
-        </button>
-
-        {/* Dropdown menu */}
-        {menuOpen && (
-          <>
-            <div style={{ position: 'fixed', inset: 0, zIndex: 998 }} onClick={() => setMenuOpen(false)} />
-            <div style={{
-              position: 'absolute',
-              right: 8,
-              top: '100%',
-              zIndex: 999,
-              backgroundColor: darkMode ? '#1a1a2e' : '#fff',
-              borderRadius: '12px',
-              boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
-              padding: '6px',
-              minWidth: '180px',
-            }}>
-              {[
-                { label: '📄 New', action: onNewProject },
-                { label: '📂 Open', action: onOpen },
-                { label: '💾 Save', action: onSave },
-                { label: '📋 Save As', action: onSaveAs },
-                { label: exporting ? '⏳ Exporting...' : '🎬 Export', action: onExport, disabled: exporting },
-                { label: `👤 ${displayName}`, action: () => {}, disabled: true },
-                { label: '🚪 Logout', action: logout },
-              ].map((item, i) => (
-                <button
-                  key={i}
-                  onClick={() => { if (!item.disabled) { item.action(); setMenuOpen(false); } }}
-                  disabled={item.disabled}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '10px 14px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    color: item.disabled ? (darkMode ? '#636E72' : '#B2BEC3') : (darkMode ? '#F5F6FA' : '#2D3436'),
-                    fontWeight: 600,
-                    fontSize: '14px',
-                    cursor: item.disabled ? 'default' : 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // ─── Desktop top bar ─────────────────────────────────────────
-
   return (
     <div style={styles.bar}>
       {/* Logo */}
       <div style={styles.logo}>
         <span style={{ fontSize: '28px' }}>🎨</span>
-        <span>Ashermate</span>
+        <span>AnimateKids</span>
       </div>
 
       {/* File actions */}
@@ -232,23 +128,6 @@ export default function TopBar({
         <button style={styles.btn()} onClick={onSave} onMouseEnter={hover} onMouseLeave={unhover}>
           💾 Save
         </button>
-        <button style={styles.btn()} onClick={onSaveAs} onMouseEnter={hover} onMouseLeave={unhover}>
-          📋 Save As
-        </button>
-        <button
-          style={styles.btn(exporting)}
-          onClick={onExport}
-          disabled={exporting}
-          onMouseEnter={exporting ? undefined : hover}
-          onMouseLeave={exporting ? undefined : unhover}
-        >
-          {exporting ? '⏳ Exporting...' : '🎬 Export'}
-        </button>
-      </div>
-
-      {/* Project Name */}
-      <div style={{ fontSize: '15px', fontWeight: 700, opacity: 0.9, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
-        {projectName}
       </div>
 
       {/* Undo / Redo */}

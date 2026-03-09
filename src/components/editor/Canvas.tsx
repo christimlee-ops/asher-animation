@@ -17,7 +17,7 @@ export interface CanvasHandle {
   canRedo: () => boolean;
   clear: () => void;
   toJSON: () => object;
-  loadJSON: (json: object) => Promise<void> | void;
+  loadJSON: (json: object) => void;
   deleteSelected: () => void;
   duplicateSelected: () => void;
   groupSelected: () => void;
@@ -40,7 +40,6 @@ interface CanvasProps {
 // ─── Constants ───────────────────────────────────────────────────────
 const CANVAS_W = 1920;
 const CANVAS_H = 1080;
-const CANVAS_PAD = 40; // small padding so objects aren't clipped at edges
 const MAX_HISTORY = 50;
 const GRID_SIZE = 40;
 
@@ -59,16 +58,12 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
     const gridLinesRef = useRef<fabric.FabricObject[]>([]);
     const isPanningRef = useRef(false);
     const lastPanPosRef = useRef<{ x: number; y: number } | null>(null);
-    const clipboardRef = useRef<fabric.FabricObject | null>(null);
-
-    // Custom properties to always include in serialization
-    const CUSTOM_PROPS = ['_animId', 'customName', '_locked'];
 
     // ─── History helpers ───────────────────────────────────────────
     const saveHistory = useCallback(() => {
       const fc = fcRef.current;
       if (!fc) return;
-      const json = JSON.stringify(fc.toObject(CUSTOM_PROPS));
+      const json = JSON.stringify(fc.toJSON());
       const idx = historyIndexRef.current;
       // Trim future
       historyRef.current = historyRef.current.slice(0, idx + 1);
@@ -115,16 +110,11 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
       if (!fc || !container) return;
       const cw = container.clientWidth;
       const ch = container.clientHeight;
-      // Fill the entire container
-      fc.setDimensions({ width: cw, height: ch });
-      // Scale the logical canvas to fit with small padding
-      const scaleX = (cw - CANVAS_PAD * 2) / CANVAS_W;
-      const scaleY = (ch - CANVAS_PAD * 2) / CANVAS_H;
+      const scaleX = cw / CANVAS_W;
+      const scaleY = ch / CANVAS_H;
       const scale = Math.min(scaleX, scaleY, 1);
-      // Center the canvas in the container
-      const offsetX = (cw - CANVAS_W * scale) / 2;
-      const offsetY = (ch - CANVAS_H * scale) / 2;
-      fc.setViewportTransform([scale, 0, 0, scale, offsetX, offsetY]);
+      fc.setDimensions({ width: CANVAS_W * scale, height: CANVAS_H * scale });
+      fc.setZoom(scale);
     }, []);
 
     // ─── Grid ──────────────────────────────────────────────────────
@@ -184,204 +174,6 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         selection: true,
       });
       fcRef.current = fc;
-
-      // ─── Custom pivot point control ─────────────────────────────
-      // Visual-only: shows where the pivot is. Change pivot via Properties panel.
-      const pivotControl = new fabric.Control({
-        x: 0,
-        y: 0,
-        cursorStyle: 'pointer',
-        sizeX: 16,
-        sizeY: 16,
-        // Position the control at the object's current origin point
-        positionHandler: function (dim, finalMatrix, fabricObject) {
-          const ox = fabricObject.originX;
-          const oy = fabricObject.originY;
-          // Convert origin to -0.5..0.5 range (center-relative)
-          let px: number, py: number;
-          if (typeof ox === 'number') { px = ox - 0.5; } else { px = ox === 'left' ? -0.5 : ox === 'right' ? 0.5 : 0; }
-          if (typeof oy === 'number') { py = oy - 0.5; } else { py = oy === 'top' ? -0.5 : oy === 'bottom' ? 0.5 : 0; }
-          return new fabric.Point(
-            px * dim.x + (this.offsetX ?? 0),
-            py * dim.y + (this.offsetY ?? 0),
-          ).transform(finalMatrix);
-        },
-        // Click to cycle: center → top-left → top → top-right → right → bottom-right → bottom → bottom-left → left → center
-        actionHandler: function (_eventData, transformData) {
-          const obj = transformData.target;
-          const origins: Array<[string, string]> = [
-            ['center', 'center'],
-            ['left', 'top'],
-            ['center', 'top'],
-            ['right', 'top'],
-            ['right', 'center'],
-            ['right', 'bottom'],
-            ['center', 'bottom'],
-            ['left', 'bottom'],
-            ['left', 'center'],
-          ];
-
-          const curOx = String(obj.originX);
-          const curOy = String(obj.originY);
-          let curIdx = origins.findIndex(([ox, oy]) => ox === curOx && oy === curOy);
-          if (curIdx === -1) curIdx = 0;
-          const nextIdx = (curIdx + 1) % origins.length;
-          const [newOx, newOy] = origins[nextIdx];
-
-          // Use fabric's translateToGivenOrigin to convert left/top
-          // from the current origin to the new origin — works in local
-          // coordinate space so it's correct for group children too
-          const pos = new fabric.Point(obj.left || 0, obj.top || 0);
-          const newPos = obj.translateToGivenOrigin(pos, curOx as any, curOy as any, newOx as any, newOy as any);
-
-          obj.originX = newOx as any;
-          obj.originY = newOy as any;
-          obj.left = newPos.x;
-          obj.top = newPos.y;
-          obj.setCoords();
-
-          // Re-render — handle both grouped and ungrouped objects
-          if (obj.group) {
-            obj.group.dirty = true;
-            obj.group.setCoords();
-            obj.group.canvas?.renderAll();
-          } else {
-            obj.canvas?.renderAll();
-          }
-          return true;
-        },
-        render: function (ctx, left, top) {
-          const size = 14;
-          ctx.save();
-          ctx.translate(left, top);
-          // Outer circle
-          ctx.beginPath();
-          ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(255, 107, 107, 0.3)';
-          ctx.fill();
-          ctx.strokeStyle = '#FF6B6B';
-          ctx.lineWidth = 2;
-          ctx.stroke();
-          // Crosshair lines
-          ctx.beginPath();
-          ctx.moveTo(-size / 2, 0);
-          ctx.lineTo(size / 2, 0);
-          ctx.moveTo(0, -size / 2);
-          ctx.lineTo(0, size / 2);
-          ctx.strokeStyle = '#FF6B6B';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-          // Center dot
-          ctx.beginPath();
-          ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = '#FF6B6B';
-          ctx.fill();
-          ctx.restore();
-        },
-        actionName: 'pivotPoint',
-      });
-
-      // Custom rotation cursor (SVG rotate icon as data URL)
-      const rotateCursorSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%234ECDC4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M21 8A9 9 0 0 0 5.64 5.64"/><path d="M3 22v-6h6"/><path d="M3 16a9 9 0 0 0 15.36 2.36"/></svg>`;
-      const rotateCursor = `url('data:image/svg+xml,${rotateCursorSvg}') 12 12, crosshair`;
-
-      // Custom rotation control that renders a rotate icon
-      const rotateControl = new fabric.Control({
-        x: 0,
-        y: -0.5,
-        offsetY: -30,
-        cursorStyle: rotateCursor,
-        actionName: 'rotate',
-        actionHandler: fabric.controlsUtils.rotationWithSnapping,
-        render: function (ctx, left, top) {
-          const size = 20;
-          ctx.save();
-          ctx.translate(left, top);
-          // Background circle
-          ctx.beginPath();
-          ctx.arc(0, 0, size / 2, 0, Math.PI * 2);
-          ctx.fillStyle = '#4ECDC4';
-          ctx.fill();
-          ctx.strokeStyle = '#2D3436';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          // Rotate arrow icon
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 2;
-          ctx.lineCap = 'round';
-          // Arc arrow
-          ctx.beginPath();
-          ctx.arc(0, 0, 5, -Math.PI * 0.8, Math.PI * 0.5);
-          ctx.stroke();
-          // Arrowhead
-          const tipX = 5 * Math.cos(Math.PI * 0.5);
-          const tipY = 5 * Math.sin(Math.PI * 0.5);
-          ctx.beginPath();
-          ctx.moveTo(tipX - 3, tipY - 2);
-          ctx.lineTo(tipX, tipY);
-          ctx.lineTo(tipX + 3, tipY - 1);
-          ctx.stroke();
-          ctx.restore();
-        },
-        sizeX: 20,
-        sizeY: 20,
-      });
-
-      // Style selection handles and add pivot + rotation controls on each object
-      const styleHandles = (obj: fabric.FabricObject) => {
-        obj.set({
-          transparentCorners: false,
-          cornerColor: '#4ECDC4',
-          cornerStrokeColor: '#2D3436',
-          cornerSize: 10,
-          cornerStyle: 'circle',
-          centeredRotation: false, // rotate around origin (pivot), not center
-          objectCaching: false, // prevent clipping of strokes/rotation
-        });
-        // Add the pivot control and override rotation control
-        obj.controls.pivot = pivotControl;
-        obj.controls.mtr = rotateControl;
-        // Recursively style children inside groups
-        if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
-          obj.getObjects().forEach((child) => styleHandles(child));
-        }
-      };
-      fc.on('object:added', (e) => { if (e.target) styleHandles(e.target); });
-
-      // Override rotation transform origin to use object's pivot (originX/originY)
-      fc.on('before:transform', (opt: any) => {
-        const t = opt.transform;
-        if (t && t.action === 'rotate') {
-          // Force transform to use the object's actual origin as the rotation anchor
-          t.originX = t.target.originX;
-          t.originY = t.target.originY;
-        }
-      });
-
-      // Draw dotted border on every render using after:render event
-      // This ensures the border is always visible regardless of JSON load/undo/redo
-      fc.on('after:render', () => {
-        const ctx = fc.getContext();
-        const vpt = fc.viewportTransform || [1, 0, 0, 1, 0, 0];
-        ctx.save();
-        ctx.setTransform(vpt[0], vpt[1], vpt[2], vpt[3], vpt[4], vpt[5]);
-
-        // Dotted border
-        ctx.strokeStyle = '#FF6B6B';
-        ctx.lineWidth = 3;
-        ctx.setLineDash([12, 8]);
-        ctx.strokeRect(0, 0, CANVAS_W, CANVAS_H);
-
-        // Label above the border
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#FF6B6B';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${CANVAS_W} × ${CANVAS_H} — video export area`, CANVAS_W / 2, -8);
-
-        ctx.restore();
-      });
-
       fitCanvas();
       saveHistory();
 
@@ -399,8 +191,8 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         zoom *= 0.999 ** delta;
         const minZoom =
           Math.min(
-            ((containerRef.current?.clientWidth || 800) - CANVAS_PAD * 2) / CANVAS_W,
-            ((containerRef.current?.clientHeight || 600) - CANVAS_PAD * 2) / CANVAS_H,
+            (containerRef.current?.clientWidth || 800) / CANVAS_W,
+            (containerRef.current?.clientHeight || 600) / CANVAS_H,
             1,
           );
         zoom = Math.max(minZoom, Math.min(5, zoom));
@@ -422,66 +214,6 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         }
         if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
         if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
-        // Copy
-        if (e.ctrlKey && e.key === 'c') {
-          const active = fc.getActiveObject();
-          if (active) {
-            e.preventDefault();
-            active.clone().then((cloned: fabric.FabricObject) => {
-              clipboardRef.current = cloned;
-            });
-          }
-        }
-        // Paste
-        if (e.ctrlKey && e.key === 'v') {
-          if (clipboardRef.current) {
-            e.preventDefault();
-            clipboardRef.current.clone().then((cloned: fabric.FabricObject) => {
-              cloned.set({
-                left: (cloned.left || 0) + 20,
-                top: (cloned.top || 0) + 20,
-              });
-              // Ungroup ActiveSelection items when pasting multi-select
-              if (cloned instanceof fabric.ActiveSelection) {
-                cloned.forEachObject((obj: fabric.FabricObject) => {
-                  fc.add(obj);
-                });
-                fc.setActiveObject(cloned);
-              } else {
-                fc.add(cloned);
-                fc.setActiveObject(cloned);
-              }
-              // Update clipboard position so successive pastes cascade
-              clipboardRef.current!.set({
-                left: (clipboardRef.current!.left || 0) + 20,
-                top: (clipboardRef.current!.top || 0) + 20,
-              });
-              fc.renderAll();
-              saveHistory();
-            });
-          }
-        }
-        // Duplicate shortcut (Ctrl+D)
-        if (e.ctrlKey && e.key === 'd') {
-          e.preventDefault();
-          const active = fc.getActiveObject();
-          if (active) {
-            active.clone().then((cloned: fabric.FabricObject) => {
-              cloned.set({ left: (cloned.left || 0) + 20, top: (cloned.top || 0) + 20 });
-              if (cloned instanceof fabric.ActiveSelection) {
-                cloned.forEachObject((obj: fabric.FabricObject) => {
-                  fc.add(obj);
-                });
-                fc.setActiveObject(cloned);
-              } else {
-                fc.add(cloned);
-                fc.setActiveObject(cloned);
-              }
-              fc.renderAll();
-              saveHistory();
-            });
-          }
-        }
       };
       window.addEventListener('keydown', handleKeyDown);
 
@@ -527,45 +259,30 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    // ─── Convert file to persistent data URL ───────────────────────
-    const fileToDataURL = (file: File): Promise<string> =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
     // ─── Import file helper ────────────────────────────────────────
-    const importFileToCanvas = async (file: File) => {
+    const importFileToCanvas = (file: File) => {
       const fc = fcRef.current;
       if (!fc) return;
-      const ext = file.name.split('.').pop()?.toLowerCase() || '';
-      const isSvg = file.type === 'image/svg+xml' || ext === 'svg';
-      const isImage = file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'].includes(ext);
-
-      // Use data URL instead of blob URL so images survive JSON serialization
-      const dataUrl = await fileToDataURL(file);
-
-      if (isSvg) {
-        fabric.loadSVGFromURL(dataUrl).then((result) => {
-          const objs = result.objects.filter(Boolean) as fabric.FabricObject[];
-          if (objs.length === 0) return;
-          const group = objs.length === 1 ? objs[0] : fabric.util.groupSVGElements(objs);
+      const url = URL.createObjectURL(file);
+      if (file.type === 'image/svg+xml') {
+        fabric.loadSVGFromURL(url).then((result) => {
+          const group = fabric.util.groupSVGElements(result.objects.filter(Boolean) as fabric.FabricObject[]);
           group.scaleToWidth(Math.min(400, CANVAS_W / 2));
           fc.add(group);
           fc.setActiveObject(group);
           fc.renderAll();
           saveHistory();
-        }).catch(() => {});
-      } else if (isImage) {
-        fabric.FabricImage.fromURL(dataUrl).then((img) => {
+          URL.revokeObjectURL(url);
+        });
+      } else if (file.type.startsWith('image/')) {
+        fabric.FabricImage.fromURL(url).then((img) => {
           img.scaleToWidth(Math.min(400, CANVAS_W / 2));
           fc.add(img);
           fc.setActiveObject(img);
           fc.renderAll();
           saveHistory();
-        }).catch(() => {});
+          URL.revokeObjectURL(url);
+        });
       }
     };
 
@@ -579,12 +296,11 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
       fc.selection = activeTool === 'select';
       fc.defaultCursor = activeTool === 'select' ? 'default' : 'crosshair';
 
-      // Set all objects selectable only in select mode (respect locked objects)
+      // Set all objects selectable only in select mode
       fc.getObjects().forEach((o) => {
         if (!(o as any).excludeFromExport) {
-          const locked = (o as any)._locked;
-          o.selectable = activeTool === 'select' && !locked;
-          o.evented = activeTool === 'select' && !locked;
+          o.selectable = activeTool === 'select';
+          o.evented = activeTool === 'select';
         }
       });
 
@@ -595,31 +311,15 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         fc.freeDrawingBrush.width = 3;
       }
 
-      if (activeTool === 'brush') {
-        fc.isDrawingMode = true;
-        const brush = new fabric.PencilBrush(fc);
-        brush.color = fillColor;
-        brush.width = 12;
-        brush.strokeLineCap = 'round';
-        brush.strokeLineJoin = 'round';
-        fc.freeDrawingBrush = brush;
-      }
-
-      // Disable default context menu on canvas so right-click drag works
-      const canvasEl = fc.getSelectionElement();
-      const preventContext = (e: Event) => e.preventDefault();
-      canvasEl.addEventListener('contextmenu', preventContext);
-
       // Shape drawing handlers
       const handleMouseDown = (opt: fabric.TPointerEventInfo) => {
-        const me = opt.e as MouseEvent;
-        // Right-click or Alt+click = pan (works in any tool)
-        if (me.button === 2 || me.altKey) {
-          isPanningRef.current = true;
-          lastPanPosRef.current = { x: me.clientX, y: me.clientY };
-          return;
-        }
-        if (activeTool === 'select' || activeTool === 'pencil' || activeTool === 'brush') {
+        if (activeTool === 'select' || activeTool === 'pencil') {
+          // Panning when zoomed
+          if (activeTool === 'select' && (opt.e as MouseEvent).altKey) {
+            isPanningRef.current = true;
+            lastPanPosRef.current = { x: (opt.e as MouseEvent).clientX, y: (opt.e as MouseEvent).clientY };
+            return;
+          }
           return;
         }
         isDrawingShapeRef.current = true;
@@ -648,8 +348,8 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
             shape = new fabric.Triangle({ ...common, width: 1, height: 1 });
             break;
           case 'star': {
-            const pts = createStarPoints(0, 0, 5, 50, 22.5);
-            shape = new fabric.Polygon(pts, { ...common, scaleX: 0.02, scaleY: 0.02 });
+            const pts = createStarPoints(0, 0, 5, 1, 0.5);
+            shape = new fabric.Polygon(pts, { ...common });
             break;
           }
           case 'line':
@@ -671,6 +371,16 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         if (shape) {
           fc.add(shape);
           tempShapeRef.current = shape;
+          if (activeTool === 'text') {
+            // Place immediately
+            isDrawingShapeRef.current = false;
+            shape.selectable = true;
+            shape.evented = true;
+            fc.setActiveObject(shape);
+            (shape as fabric.IText).enterEditing();
+            fc.renderAll();
+            saveHistory();
+          }
         }
       };
 
@@ -708,20 +418,16 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
             break;
           case 'star': {
             const r = Math.max(w, h) / 2;
-            const scale = Math.max(r / 50, 0.02);
-            shape.set({ left: Math.min(sx, px), top: Math.min(sy, py), scaleX: scale, scaleY: scale });
+            const pts = createStarPoints(0, 0, 5, r, r * 0.45);
+            (shape as fabric.Polygon).set({ points: pts, left: Math.min(sx, px), top: Math.min(sy, py) });
+            // Fabric needs dirty flag for polygon recalc
+            (shape as any).dirty = true;
             shape.setCoords();
             break;
           }
           case 'line':
             (shape as fabric.Line).set({ x2: px, y2: py });
             break;
-          case 'text': {
-            // Scale font size based on drag height, reposition to top-left
-            const fontSize = Math.max(12, h);
-            shape.set({ left: Math.min(sx, px), top: Math.min(sy, py), fontSize });
-            break;
-          }
         }
         fc.renderAll();
       };
@@ -765,7 +471,6 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         fc.off('mouse:move', handleMouseMove);
         fc.off('mouse:up', handleMouseUp);
         fc.off('path:created', handlePathCreated);
-        canvasEl.removeEventListener('contextmenu', preventContext);
       };
     }, [activeTool, fillColor, strokeColor, saveHistory]);
 
@@ -801,23 +506,15 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           if (!fc) return;
           fc.clear();
           fc.backgroundColor = '#ffffff';
-          // Border is drawn via after:render event, no objects needed
           fc.renderAll();
           saveHistory();
           onSelectionChange(null);
         },
-        toJSON: () => fcRef.current?.toObject(CUSTOM_PROPS) || {},
+        toJSON: () => fcRef.current?.toJSON() || {},
         loadJSON: (json: object) => {
           const fc = fcRef.current;
-          if (!fc) return Promise.resolve();
-          return fc.loadFromJSON(json).then(() => {
-            // Restore locked state on loaded objects
-            fc.getObjects().forEach((obj) => {
-              if ((obj as any)._locked) {
-                obj.selectable = false;
-                obj.evented = false;
-              }
-            });
+          if (!fc) return;
+          fc.loadFromJSON(json).then(() => {
             fc.renderAll();
             saveHistory();
           });
@@ -857,10 +554,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           if (objects.length < 2) return;
           fc.discardActiveObject();
           objects.forEach((o) => fc.remove(o));
-          const group = new fabric.Group(objects, {
-            subTargetCheck: true,
-            interactive: false,
-          });
+          const group = new fabric.Group(objects);
           fc.add(group);
           fc.setActiveObject(group);
           fc.renderAll();
@@ -873,58 +567,37 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           const active = fc.getActiveObject();
           if (!active || !(active instanceof fabric.Group) || active instanceof fabric.ActiveSelection) return;
           const group = active as fabric.Group;
-          // Capture transform data BEFORE any mutations
-          const groupMatrix = group.calcTransformMatrix();
+          const matrix = group.calcTransformMatrix();
           const items = group.getObjects().slice();
-          if (items.length === 0) return;
-          // Collect item data while group is still intact
-          const itemData = items.map((item) => ({
-            item,
-            point: fabric.util.transformPoint(
+          fc.remove(group);
+          const addedItems: fabric.FabricObject[] = [];
+          items.forEach((item) => {
+            // Transform child's center point through the group's matrix
+            const point = fabric.util.transformPoint(
               new fabric.Point(item.left || 0, item.top || 0),
-              groupMatrix,
-            ),
-            scaleX: (item.scaleX || 1) * (group.scaleX || 1),
-            scaleY: (item.scaleY || 1) * (group.scaleY || 1),
-            angle: (item.angle || 0) + (group.angle || 0),
-          }));
-          // Clone all items, then remove group and add clones
-          // Preserve _animId so animation timelines stay linked
-          Promise.all(
-            itemData.map((d) =>
-              d.item.clone().then((cloned: fabric.FabricObject) => {
-                cloned.set({
-                  left: d.point.x,
-                  top: d.point.y,
-                  scaleX: d.scaleX,
-                  scaleY: d.scaleY,
-                  angle: d.angle,
-                });
-                // Preserve animation ID and custom name
-                if ((d.item as any)._animId) {
-                  (cloned as any)._animId = (d.item as any)._animId;
-                }
-                if ((d.item as any).customName) {
-                  (cloned as any).customName = (d.item as any).customName;
-                }
-                cloned.setCoords();
-                return cloned;
-              }),
-            ),
-          ).then((clonedItems) => {
-            fc.discardActiveObject();
-            fc.remove(group);
-            clonedItems.forEach((c) => fc.add(c));
-            if (clonedItems.length > 1) {
-              const sel = new fabric.ActiveSelection(clonedItems, { canvas: fc });
-              fc.setActiveObject(sel);
-            } else if (clonedItems.length === 1) {
-              fc.setActiveObject(clonedItems[0]);
-            }
-            fc.renderAll();
-            saveHistory();
-            onSelectionChange(fc.getActiveObject() || null);
+              matrix,
+            );
+            item.set({
+              left: point.x,
+              top: point.y,
+              scaleX: (item.scaleX || 1) * (group.scaleX || 1),
+              scaleY: (item.scaleY || 1) * (group.scaleY || 1),
+              angle: (item.angle || 0) + (group.angle || 0),
+            });
+            item.setCoords();
+            fc.add(item);
+            addedItems.push(item);
           });
+          fc.discardActiveObject();
+          if (addedItems.length > 1) {
+            const sel = new fabric.ActiveSelection(addedItems, { canvas: fc });
+            fc.setActiveObject(sel);
+          } else if (addedItems.length === 1) {
+            fc.setActiveObject(addedItems[0]);
+          }
+          fc.renderAll();
+          saveHistory();
+          onSelectionChange(fc.getActiveObject() || null);
         },
         setBackgroundColor: (color: string) => {
           const fc = fcRef.current;
@@ -947,18 +620,28 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
     );
 
     // ─── Styles ────────────────────────────────────────────────────
+    const styles = {
+      container: {
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+        backgroundColor: darkMode ? '#0f3460' : '#E8F0FE',
+        position: 'relative' as const,
+      },
+      canvasWrapper: {
+        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+        borderRadius: '8px',
+        overflow: 'hidden',
+      },
+    };
+
     return (
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          overflow: 'hidden',
-          backgroundColor: darkMode ? '#0f3460' : '#E8F0FE',
-          position: 'relative' as const,
-          touchAction: 'none',
-        }}
-      >
-        <canvas ref={canvasElRef} />
+      <div ref={containerRef} style={styles.container}>
+        <div style={styles.canvasWrapper}>
+          <canvas ref={canvasElRef} />
+        </div>
       </div>
     );
   },
