@@ -406,6 +406,63 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingKf, totalFrames, FRAME_W, animState, onAnimStateChange]);
 
+  // ─── Custom mouse-based layer drag ─────────────────────────────
+  const [layerDrag, setLayerDrag] = useState<{ sourceId: string; startY: number } | null>(null);
+  const [layerDragOverId, setLayerDragOverId] = useState<string | null>(null);
+  const layerDragActive = useRef(false);
+
+  useEffect(() => {
+    if (!layerDrag) return;
+    const handleMove = (e: MouseEvent) => {
+      // Only start "real" drag after moving a few pixels
+      if (!layerDragActive.current && Math.abs(e.clientY - layerDrag.startY) > 4) {
+        layerDragActive.current = true;
+      }
+      if (!layerDragActive.current) return;
+
+      // Find which label row the mouse is over
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+      const rowEl = el?.closest('[data-timeline-id]') as HTMLElement | null;
+      if (rowEl) {
+        const targetId = rowEl.getAttribute('data-timeline-id');
+        if (targetId && targetId !== layerDrag.sourceId) {
+          setLayerDragOverId(targetId);
+        } else {
+          setLayerDragOverId(null);
+        }
+      } else {
+        setLayerDragOverId(null);
+      }
+    };
+
+    const handleUp = () => {
+      if (layerDragActive.current && layerDragOverId) {
+        // Perform the move
+        const sourceRow = rows.find((r) => (r.obj as any)._animId === layerDrag.sourceId);
+        const targetRow = rows.find((r) => (r.obj as any)._animId === layerDragOverId);
+        if (sourceRow && targetRow && canvas) {
+          const isTargetGroup = targetRow.obj instanceof fabric.Group && !(targetRow.obj instanceof fabric.ActiveSelection);
+          if (isTargetGroup && targetRow.obj !== sourceRow.parentGroup) {
+            moveToGroup(sourceRow.obj, sourceRow.parentGroup, targetRow.obj as fabric.Group);
+          } else if (!isTargetGroup && sourceRow.parentGroup && targetRow.depth === 0) {
+            removeFromGroup(sourceRow.obj, sourceRow.parentGroup);
+          }
+        }
+      }
+      layerDragActive.current = false;
+      setLayerDrag(null);
+      setLayerDragOverId(null);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layerDrag, layerDragOverId, rows, canvas]);
+
   // ─── Move layers into/out of groups ────────────────────────────
   const moveToGroup = useCallback((sourceObj: fabric.FabricObject, sourceParent: fabric.Group | null, targetGroup: fabric.Group) => {
     if (!canvas) return;
@@ -693,11 +750,22 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
               const isGroup = row.obj instanceof fabric.Group && !(row.obj instanceof fabric.ActiveSelection);
               const isEditingThisGroup = isGroup && editingGroup === row.obj;
               const isChildOfEditingGroup = row.parentGroup && editingGroup === row.parentGroup;
+              const isDragOver = layerDragOverId === id && layerDrag?.sourceId !== id;
+              const isDragging = layerDrag?.sourceId === id && layerDragActive.current;
               return (
                 <div
                   key={id}
                   data-timeline-id={id}
-                  onClick={() => selectTimelineLayer(row)}
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    // Don't start drag from buttons/selects
+                    if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).tagName === 'SELECT') return;
+                    setLayerDrag({ sourceId: id, startY: e.clientY });
+                    layerDragActive.current = false;
+                  }}
+                  onClick={() => {
+                    if (!layerDragActive.current) selectTimelineLayer(row);
+                  }}
                   style={{
                     height: `${ROW_H}px`,
                     display: 'flex',
@@ -710,77 +778,37 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     color: isSelected ? accent : hasKf ? text : dimText,
-                    backgroundColor: isSelected
-                      ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.08)')
-                      : isEditingThisGroup
-                        ? (darkMode ? 'rgba(255,107,107,0.1)' : 'rgba(255,107,107,0.06)')
-                        : isChildOfEditingGroup
-                          ? (darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
-                          : 'transparent',
-                    cursor: 'pointer',
-                    borderLeft: isSelected ? `2px solid ${accent}` : '2px solid transparent',
+                    backgroundColor: isDragOver
+                      ? (isGroup
+                        ? (darkMode ? 'rgba(78,205,196,0.35)' : 'rgba(78,205,196,0.25)')
+                        : (darkMode ? 'rgba(255,200,100,0.2)' : 'rgba(255,200,100,0.15)'))
+                      : isDragging
+                        ? (darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')
+                        : isSelected
+                          ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.08)')
+                          : isEditingThisGroup
+                            ? (darkMode ? 'rgba(255,107,107,0.1)' : 'rgba(255,107,107,0.06)')
+                            : isChildOfEditingGroup
+                              ? (darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
+                              : 'transparent',
+                    cursor: layerDrag ? 'grabbing' : 'grab',
+                    borderLeft: isDragOver
+                      ? `2px solid ${isGroup ? accent : '#FFD93D'}`
+                      : isSelected ? `2px solid ${accent}` : '2px solid transparent',
+                    opacity: isDragging ? 0.5 : 1,
+                    userSelect: 'none',
                   }}
-                  title={row.depth > 0
-                    ? `${getLabel(row.obj)} — click to edit within group`
-                    : `${getLabel(row.obj)} — click to select for keyframing`}
+                  title={isDragOver
+                    ? (isGroup ? `Drop into ${getLabel(row.obj)}` : 'Drop here to ungroup')
+                    : row.depth > 0
+                      ? `${getLabel(row.obj)} — drag to move out of group`
+                      : isGroup
+                        ? `${getLabel(row.obj)} — drag shapes here`
+                        : `${getLabel(row.obj)} — drag onto a group`}
                 >
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {isGroup ? (isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
+                    {isGroup ? (isDragOver ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
                   </span>
-                  {/* Add-to-group button: show on selected non-group top-level items when groups exist */}
-                  {isSelected && !isGroup && row.depth === 0 && rows.some((r) => r.obj instanceof fabric.Group && !(r.obj instanceof fabric.ActiveSelection) && r.depth === 0) && (
-                    <select
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        const targetId = e.target.value;
-                        if (!targetId) return;
-                        const targetRow = rows.find((r) => (r.obj as any)._animId === targetId);
-                        if (targetRow && targetRow.obj instanceof fabric.Group) {
-                          moveToGroup(row.obj, row.parentGroup, targetRow.obj as fabric.Group);
-                        }
-                        e.target.value = '';
-                      }}
-                      style={{
-                        fontSize: '9px',
-                        padding: '1px 2px',
-                        borderRadius: '4px',
-                        border: `1px solid ${accent}`,
-                        backgroundColor: darkMode ? 'rgba(78,205,196,0.2)' : 'rgba(78,205,196,0.1)',
-                        color: accent,
-                        cursor: 'pointer',
-                        maxWidth: '50px',
-                      }}
-                      defaultValue=""
-                      title="Move this layer into a group"
-                    >
-                      <option value="" disabled>→ Grp</option>
-                      {rows.filter((r) => r.obj instanceof fabric.Group && !(r.obj instanceof fabric.ActiveSelection) && r.depth === 0).map((r) => (
-                        <option key={(r.obj as any)._animId} value={(r.obj as any)._animId}>{getLabel(r.obj)}</option>
-                      ))}
-                    </select>
-                  )}
-                  {/* Remove-from-group button: show on selected items inside a group */}
-                  {isSelected && row.parentGroup && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFromGroup(row.obj, row.parentGroup!);
-                      }}
-                      style={{
-                        fontSize: '9px',
-                        padding: '1px 4px',
-                        borderRadius: '4px',
-                        border: `1px solid ${kfColor}`,
-                        backgroundColor: darkMode ? 'rgba(255,107,107,0.2)' : 'rgba(255,107,107,0.1)',
-                        color: kfColor,
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title="Remove from group"
-                    >
-                      ← Out
-                    </button>
-                  )}
                 </div>
               );
             })}
