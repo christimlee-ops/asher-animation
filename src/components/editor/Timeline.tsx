@@ -1198,7 +1198,26 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                         }}
                         title={isDragging ? `Moving to frame ${displayFrame}` : `Frame ${kf.frame} — drag to move, long-press or right-click to delete`}
                         onMouseDown={(e) => { if (e.button === 0) handleKfDragStart(e, id, kf.frame); }}
-                        onClick={(e) => { e.stopPropagation(); if (!draggingKf) scrubTo(kf.frame); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (!draggingKf) {
+                            scrubTo(kf.frame);
+                            setSelectedAnimId(id);
+                            // Select the object on canvas
+                            const obj = findObjByAnimId(id);
+                            if (obj && canvas) {
+                              // If object is inside a group, enter interactive mode
+                              if (obj.group && obj.group instanceof fabric.Group) {
+                                obj.group.interactive = true;
+                                obj.group.subTargetCheck = true;
+                                canvas.setActiveObject(obj);
+                              } else {
+                                canvas.setActiveObject(obj);
+                              }
+                              canvas.renderAll();
+                            }
+                          }
+                        }}
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); deleteKeyframe(id, kf.frame); }}
                         onTouchStart={(e) => {
                           const timer = setTimeout(() => {
