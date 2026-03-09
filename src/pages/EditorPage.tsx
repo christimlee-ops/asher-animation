@@ -13,8 +13,8 @@ import type { AnimationState, AudioTrack } from '../lib/animationState';
 import { exportToMp4 } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
-import { uploadAsset, listAssets, deleteAsset, getAssetFullUrl, isAudioAsset } from '../lib/mediaLibrary';
-import type { MediaAsset } from '../lib/mediaLibrary';
+import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES } from '../lib/mediaLibrary';
+import type { MediaAsset, AssetCategory } from '../lib/mediaLibrary';
 import { useIsTablet } from '../lib/useMediaQuery';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -40,6 +40,8 @@ export default function EditorPage() {
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [canvasVersion, setCanvasVersion] = useState(0);
   const [libraryAssets, setLibraryAssets] = useState<MediaAsset[]>([]);
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const isTablet = useIsTablet();
   const canvasRef = useRef<CanvasHandle>(null);
 
@@ -60,43 +62,58 @@ export default function EditorPage() {
     setSelectedObject(obj);
   }, []);
 
-  const handleImport = useCallback(() => {
+  const handleImportToLibrary = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.svg,.png,.jpg,.jpeg,.gif,.webp,.mp3,.wav,.ogg,.m4a,.aac';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      const isAudio = /\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(file.name) || file.type.startsWith('audio/');
-      if (isAudio) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const dataUrl = reader.result as string;
-          const track: AudioTrack = {
-            id: `audio_${Date.now()}`,
-            name: file.name.replace(/\.[^.]+$/, ''),
-            dataUrl,
-            startFrame: 0,
-            volume: 1,
-          };
-          setAnimState((prev) => ({
-            ...prev,
-            audioTracks: [...(prev.audioTracks || []), track],
-          }));
-        };
-        reader.readAsDataURL(file);
-      } else {
-        canvasRef.current?.importFile(file);
-      }
-      // Upload to media library in the background
-      uploadAsset(file)
-        .then((asset) => {
-          setLibraryAssets((prev) => [asset, ...prev]);
-        })
-        .catch((err) => console.warn('Failed to save to library:', err));
+      setPendingImportFile(file);
+      setShowCategoryPicker(true);
     };
     input.click();
   }, []);
+
+  const handleImport = handleImportToLibrary;
+
+  const confirmImportWithCategory = useCallback((category: AssetCategory) => {
+    const file = pendingImportFile;
+    if (!file) return;
+    setShowCategoryPicker(false);
+    setPendingImportFile(null);
+
+    const fileIsAudio = /\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(file.name) || file.type.startsWith('audio/');
+
+    // Add to canvas/timeline immediately
+    if (fileIsAudio) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const track: AudioTrack = {
+          id: `audio_${Date.now()}`,
+          name: file.name.replace(/\.[^.]+$/, ''),
+          dataUrl,
+          startFrame: 0,
+          volume: 1,
+        };
+        setAnimState((prev) => ({
+          ...prev,
+          audioTracks: [...(prev.audioTracks || []), track],
+        }));
+      };
+      reader.readAsDataURL(file);
+    } else {
+      canvasRef.current?.importFile(file);
+    }
+
+    // Upload to library with category
+    uploadAsset(file, category)
+      .then((asset) => {
+        setLibraryAssets((prev) => [asset, ...prev]);
+      })
+      .catch((err) => console.warn('Failed to save to library:', err));
+  }, [pendingImportFile]);
 
   const handleUseAsset = useCallback((asset: MediaAsset) => {
     const fullUrl = getAssetFullUrl(asset);
@@ -155,6 +172,16 @@ export default function EditorPage() {
         setLibraryAssets((prev) => prev.filter((a) => a.id !== asset.id));
       })
       .catch(() => alert('Failed to delete asset'));
+  }, []);
+
+  const handleChangeAssetCategory = useCallback((asset: MediaAsset, category: AssetCategory) => {
+    updateAssetCategory(asset.id, category)
+      .then(() => {
+        setLibraryAssets((prev) =>
+          prev.map((a) => a.id === asset.id ? { ...a, category } : a)
+        );
+      })
+      .catch(() => alert('Failed to update category'));
   }, []);
 
   const handleExport = useCallback(async () => {
@@ -442,6 +469,8 @@ export default function EditorPage() {
           libraryAssets={libraryAssets}
           onUseAsset={handleUseAsset}
           onDeleteAsset={handleDeleteAsset}
+          onImportToLibrary={handleImportToLibrary}
+          onChangeAssetCategory={handleChangeAssetCategory}
         />
       </div>
 
@@ -784,6 +813,93 @@ export default function EditorPage() {
                 {saveModalMode === 'saveAs' ? 'Save As New' : 'Save'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Category Picker Modal */}
+      {showCategoryPicker && pendingImportFile && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => { setShowCategoryPicker(false); setPendingImportFile(null); }}
+        >
+          <div
+            style={{
+              backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
+              borderRadius: '16px',
+              padding: '24px',
+              minWidth: '340px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              color: darkMode ? '#F5F6FA' : '#2D3436',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ margin: '0 0 4px', fontSize: '18px', fontWeight: 800 }}>Choose Category</h2>
+            <p style={{ margin: '0 0 16px', fontSize: '13px', color: darkMode ? '#636E72' : '#B2BEC3' }}>
+              Where should "{pendingImportFile.name}" be filed?
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {ASSET_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.key}
+                  onClick={() => confirmImportWithCategory(cat.key)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '12px 16px',
+                    borderRadius: '10px',
+                    border: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
+                    backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                    color: darkMode ? '#F5F6FA' : '#2D3436',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                      ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)';
+                    (e.currentTarget as HTMLElement).style.borderColor = '#4ECDC4';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                      ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+                    (e.currentTarget as HTMLElement).style.borderColor = darkMode
+                      ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+                  }}
+                >
+                  <span style={{ fontSize: '20px' }}>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => { setShowCategoryPicker(false); setPendingImportFile(null); }}
+              style={{
+                marginTop: '12px',
+                padding: '8px 20px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#DFE6E9',
+                color: darkMode ? '#F5F6FA' : '#636E72',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontSize: '13px',
+                width: '100%',
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

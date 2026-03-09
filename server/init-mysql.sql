@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS assets (
   original_name VARCHAR(255),
   mime_type VARCHAR(100),
   size INT,
+  category VARCHAR(50) DEFAULT 'other',
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

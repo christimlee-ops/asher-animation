@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import type { MediaAsset } from '../../lib/mediaLibrary';
-import { getAssetFullUrl } from '../../lib/mediaLibrary';
+import type { MediaAsset, AssetCategory } from '../../lib/mediaLibrary';
+import { getAssetFullUrl, ASSET_CATEGORIES } from '../../lib/mediaLibrary';
 
 export type ToolName =
   | 'select'
@@ -30,6 +30,8 @@ interface ToolsPanelProps {
   libraryAssets?: MediaAsset[];
   onUseAsset?: (asset: MediaAsset) => void;
   onDeleteAsset?: (asset: MediaAsset) => void;
+  onImportToLibrary?: () => void;
+  onChangeAssetCategory?: (asset: MediaAsset, category: AssetCategory) => void;
 }
 
 const S = 18; // icon size
@@ -50,7 +52,6 @@ const TOOL_ICONS: Record<ToolName, React.ReactNode> = {
 };
 
 const ACTION_ICONS: Record<string, React.ReactNode> = {
-  import: <Icon><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Icon>,
   eraser: <Icon><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></Icon>,
   group: <Icon><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/><path d="M10 6h4m-4 12h4M6 10v4m12-4v4" strokeDasharray="2 2"/></Icon>,
   ungroup: <Icon><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/><path d="M14 10l-4 4" strokeDasharray="2 2"/></Icon>,
@@ -70,7 +71,6 @@ const TOOLS: { name: ToolName; label: string }[] = [
 ];
 
 const ACTIONS: { name: ActionName; label: string }[] = [
-  { name: 'import', label: 'Import' },
   { name: 'eraser', label: 'Delete' },
   { name: 'group', label: 'Group' },
   { name: 'ungroup', label: 'Ungroup' },
@@ -86,11 +86,16 @@ export default function ToolsPanel({
   libraryAssets = [],
   onUseAsset,
   onDeleteAsset,
+  onImportToLibrary,
+  onChangeAssetCategory,
 }: ToolsPanelProps) {
-  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [activeCategory, setActiveCategory] = useState<AssetCategory>('characters');
+  const [editingAsset, setEditingAsset] = useState<MediaAsset | null>(null);
   const panelBg = darkMode ? '#16213e' : '#f0f1f3';
   const textColor = darkMode ? '#F5F6FA' : '#2D3436';
   const sectionBorder = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+
+  const filteredAssets = libraryAssets.filter((a) => a.category === activeCategory);
 
   // ─── Compact (tablet) horizontal bar ──────────────────────────
 
@@ -134,6 +139,10 @@ export default function ToolsPanel({
             {ACTION_ICONS[a.name]}
           </button>
         ))}
+        <div style={{ width: '1px', height: '24px', backgroundColor: sectionBorder, flexShrink: 0, margin: '0 2px' }} />
+        <button style={compactBtn(false)} onClick={onImportToLibrary} title="Import to Library">
+          <Icon><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Icon>
+        </button>
       </div>
     );
   }
@@ -250,93 +259,240 @@ export default function ToolsPanel({
         </button>
       ))}
 
-      {/* Media Library */}
-      <div
-        style={{ ...styles.sectionTitle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-        onClick={() => setLibraryOpen(!libraryOpen)}
+      {/* ─── Media Library ──────────────────────────────────────── */}
+      <div style={styles.sectionTitle}>Media Library</div>
+
+      {/* Import button */}
+      <button
+        style={{
+          ...styles.actionBtn,
+          background: darkMode
+            ? 'linear-gradient(135deg, rgba(78,205,196,0.2), rgba(78,205,196,0.08))'
+            : 'linear-gradient(135deg, rgba(78,205,196,0.15), rgba(78,205,196,0.05))',
+          border: `1px dashed ${darkMode ? 'rgba(78,205,196,0.4)' : 'rgba(78,205,196,0.5)'}`,
+          fontWeight: 700,
+        }}
+        onClick={onImportToLibrary}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.borderColor = '#4ECDC4';
+          (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+            ? 'rgba(78,205,196,0.25)' : 'rgba(78,205,196,0.2)';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.borderColor = darkMode ? 'rgba(78,205,196,0.4)' : 'rgba(78,205,196,0.5)';
+          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+        }}
+        title="Import file to library"
       >
-        <span>Library</span>
-        <span style={{ fontSize: '10px' }}>{libraryOpen ? '▼' : '▶'}</span>
+        <span style={styles.toolIcon}>
+          <Icon><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Icon>
+        </span>
+        <span>Import</span>
+      </button>
+
+      {/* Category tabs */}
+      <div style={{ display: 'flex', gap: '2px', marginTop: '2px' }}>
+        {ASSET_CATEGORIES.map((cat) => {
+          const count = libraryAssets.filter((a) => a.category === cat.key).length;
+          const isActive = activeCategory === cat.key;
+          return (
+            <button
+              key={cat.key}
+              onClick={() => setActiveCategory(cat.key)}
+              style={{
+                flex: 1,
+                padding: '5px 2px',
+                borderRadius: '8px',
+                border: 'none',
+                backgroundColor: isActive
+                  ? (darkMode ? 'rgba(78,205,196,0.2)' : 'rgba(78,205,196,0.15)')
+                  : 'transparent',
+                color: isActive
+                  ? '#4ECDC4'
+                  : (darkMode ? '#636E72' : '#B2BEC3'),
+                fontSize: '10px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '1px',
+                transition: 'all 0.15s',
+              }}
+              title={cat.label}
+            >
+              <span style={{ fontSize: '14px' }}>{cat.icon}</span>
+              <span>{count}</span>
+            </button>
+          );
+        })}
       </div>
-      {libraryOpen && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-          {libraryAssets.length === 0 ? (
-            <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3', padding: '8px 4px', textAlign: 'center' }}>
-              Import files to build your library
-            </div>
-          ) : (
-            libraryAssets.map((asset) => {
-              const isAudio = asset.mime_type.startsWith('audio/');
-              return (
-                <div
-                  key={asset.id}
+
+      {/* Asset list for active category */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minHeight: 0 }}>
+        {filteredAssets.length === 0 ? (
+          <div style={{
+            fontSize: '11px',
+            color: darkMode ? '#636E72' : '#B2BEC3',
+            padding: '12px 4px',
+            textAlign: 'center',
+            lineHeight: 1.4,
+          }}>
+            No {ASSET_CATEGORIES.find((c) => c.key === activeCategory)?.label.toLowerCase()} yet.
+            <br />Import files to get started.
+          </div>
+        ) : (
+          filteredAssets.map((asset) => {
+            const isAudio = asset.mime_type.startsWith('audio/');
+            return (
+              <div
+                key={asset.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '5px 8px',
+                  borderRadius: '8px',
+                  backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: textColor,
+                  transition: 'background-color 0.15s',
+                }}
+                onClick={() => onUseAsset?.(asset)}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                    ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                    ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+                }}
+                title={`Click to add: ${asset.original_name}`}
+              >
+                {isAudio ? (
+                  <span style={{ fontSize: '14px', flexShrink: 0, width: '24px', textAlign: 'center' }}>♪</span>
+                ) : (
+                  <img
+                    src={getAssetFullUrl(asset)}
+                    alt=""
+                    style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }}
+                  />
+                )}
+                <span style={{
+                  flex: 1,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontWeight: 600,
+                }}>
+                  {asset.original_name}
+                </span>
+                {/* Edit category button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingAsset(editingAsset?.id === asset.id ? null : asset);
+                  }}
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    padding: '4px 8px',
-                    borderRadius: '8px',
-                    backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                    background: 'none',
+                    border: 'none',
+                    color: darkMode ? '#636E72' : '#B2BEC3',
                     cursor: 'pointer',
-                    fontSize: '12px',
-                    color: textColor,
-                    transition: 'background-color 0.15s',
+                    fontSize: '10px',
+                    padding: '2px 3px',
+                    borderRadius: '4px',
+                    flexShrink: 0,
                   }}
-                  onClick={() => onUseAsset?.(asset)}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
-                      ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
-                      ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
-                  }}
-                  title={`Click to add: ${asset.original_name}`}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#4ECDC4'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = darkMode ? '#636E72' : '#B2BEC3'; }}
+                  title="Change category"
                 >
-                  {isAudio ? (
-                    <span style={{ fontSize: '16px', flexShrink: 0 }}>♪</span>
-                  ) : (
-                    <img
-                      src={getAssetFullUrl(asset)}
-                      alt=""
-                      style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }}
-                    />
-                  )}
-                  <span style={{
-                    flex: 1,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    fontWeight: 600,
-                  }}>
-                    {asset.original_name}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteAsset?.(asset);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#FF6B6B',
-                      cursor: 'pointer',
-                      fontSize: '11px',
-                      padding: '2px 4px',
-                      borderRadius: '4px',
-                      flexShrink: 0,
-                      opacity: 0.6,
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.6'; }}
-                    title="Remove from library"
-                  >
-                    ✕
-                  </button>
-                </div>
-              );
-            })
-          )}
+                  <Icon><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></Icon>
+                </button>
+                {/* Delete button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteAsset?.(asset);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#FF6B6B',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    padding: '2px 3px',
+                    borderRadius: '4px',
+                    flexShrink: 0,
+                    opacity: 0.5,
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.5'; }}
+                  title="Remove from library"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Inline category editor dropdown */}
+      {editingAsset && (
+        <div style={{
+          padding: '6px',
+          borderRadius: '8px',
+          backgroundColor: darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)',
+          border: `1px solid ${darkMode ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'}`,
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, color: darkMode ? '#96CEB4' : '#636E72', marginBottom: '4px', padding: '0 4px' }}>
+            Move "{editingAsset.original_name}" to:
+          </div>
+          {ASSET_CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => {
+                if (cat.key !== editingAsset.category) {
+                  onChangeAssetCategory?.(editingAsset, cat.key);
+                }
+                setEditingAsset(null);
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                width: '100%',
+                padding: '5px 8px',
+                borderRadius: '6px',
+                border: 'none',
+                backgroundColor: cat.key === editingAsset.category
+                  ? (darkMode ? 'rgba(78,205,196,0.2)' : 'rgba(78,205,196,0.15)')
+                  : 'transparent',
+                color: cat.key === editingAsset.category ? '#4ECDC4' : textColor,
+                fontWeight: cat.key === editingAsset.category ? 700 : 600,
+                fontSize: '12px',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              onMouseEnter={(e) => {
+                if (cat.key !== editingAsset.category) {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                    ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (cat.key !== editingAsset.category) {
+                  (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                }
+              }}
+            >
+              <span>{cat.icon}</span>
+              <span>{cat.label}</span>
+              {cat.key === editingAsset.category && <span style={{ marginLeft: 'auto', fontSize: '10px' }}>current</span>}
+            </button>
+          ))}
         </div>
       )}
     </div>
