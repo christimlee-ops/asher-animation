@@ -63,6 +63,8 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const [selectedAnimId, setSelectedAnimId] = useState<string | null>(null);
   // Track which group is in "edit children" mode
   const [editingGroup, setEditingGroup] = useState<fabric.Group | null>(null);
+  // Groups are collapsed by default — track which are expanded
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const playRef = useRef<number | null>(null);
   const lastTimeRef = useRef(0);
   const frameAreaRef = useRef<HTMLDivElement | null>(null);
@@ -76,7 +78,27 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const totalW = totalFrames * FRAME_W;
 
   // Build timeline rows (groups + their children, flat list with depth)
-  const rows: TimelineRow[] = canvas ? collectRows(canvas.getObjects(), 0, null) : [];
+  const allRows: TimelineRow[] = canvas ? collectRows(canvas.getObjects(), 0, null) : [];
+
+  // Filter out children of collapsed groups
+  const rows: TimelineRow[] = [];
+  const collapsedDepths: number[] = [];
+  for (const row of allRows) {
+    // If we're inside a collapsed group, skip this row
+    if (collapsedDepths.length > 0 && row.depth > collapsedDepths[collapsedDepths.length - 1]) {
+      continue;
+    }
+    // Pop out of collapsed depth tracking if we're back at or above
+    while (collapsedDepths.length > 0 && row.depth <= collapsedDepths[collapsedDepths.length - 1]) {
+      collapsedDepths.pop();
+    }
+    rows.push(row);
+    const isGroup = row.obj instanceof fabric.Group && !(row.obj instanceof fabric.ActiveSelection);
+    const id = (row.obj as any)._animId;
+    if (isGroup && !expandedGroups.has(id)) {
+      collapsedDepths.push(row.depth);
+    }
+  }
 
   // Ensure all objects have anim IDs and disable caching on animated objects
   rows.forEach((r) => {
@@ -838,6 +860,21 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                   }}
                   title={`${getLabel(row.obj)} — drag to reorder`}
                 >
+                  {isGroup && (
+                    <span
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedGroups((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(id)) next.delete(id); else next.add(id);
+                          return next;
+                        });
+                      }}
+                      style={{ cursor: 'pointer', fontSize: '9px', marginRight: '2px', flexShrink: 0, opacity: 0.7 }}
+                    >
+                      {expandedGroups.has(id) ? '▼' : '▶'}
+                    </span>
+                  )}
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {isGroup ? (isDragInto ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
                   </span>
