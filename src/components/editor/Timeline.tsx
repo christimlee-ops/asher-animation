@@ -604,24 +604,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     window.addEventListener('mouseup', onUp);
   }, [ROW_H]);
 
-  // ─── Move layer up/down within its container ───────────────────
-  // Uses moveObjectTo which directly splices _objects without
-  // coordinate transforms (unlike remove+insertAt which converts
-  // coordinates through exitGroup/enterGroup).
-  const moveLayerInContainer = useCallback((row: TimelineRow, direction: 'up' | 'down') => {
-    if (!canvas) return;
-    const container: any = row.parentGroup || canvas;
-    const objs = container.getObjects() as fabric.FabricObject[];
-    const idx = objs.indexOf(row.obj);
-    if (idx === -1) return;
-    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (newIdx < 0 || newIdx >= objs.length) return;
-
-    container.moveObjectTo(row.obj, newIdx);
-    canvas.renderAll();
-    forceUpdate((n) => n + 1);
-  }, [canvas]);
-
   // ─── FPS / Duration controls ───────────────────────────────────
   const setFps = (newFps: number) => {
     const duration = totalFrames / fps;
@@ -820,13 +802,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
               const isDragInto = dropIndicator?.targetId === id && dropIndicator?.position === 'into' && isGroup;
               const isDragBefore = dropIndicator?.targetId === id && dropIndicator?.position === 'before';
               const isDragAfter = dropIndicator?.targetId === id && dropIndicator?.position === 'after';
-              // For arrow buttons: find siblings in the same container
-              const siblings = row.parentGroup
-                ? rows.filter((r) => r.parentGroup === row.parentGroup)
-                : rows.filter((r) => r.depth === 0);
-              const sibIdx = siblings.indexOf(row);
-              const canMoveUp = sibIdx > 0;
-              const canMoveDown = sibIdx < siblings.length - 1;
               return (
                 <div
                   key={id}
@@ -873,32 +848,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {isGroup ? (isDragInto ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
                   </span>
-                  {(canMoveUp || canMoveDown) && (
-                    <span style={{ display: 'flex', gap: '0px', marginLeft: 'auto', flexShrink: 0 }}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); if (canMoveUp) moveLayerInContainer(row, 'up'); }}
-                        style={{
-                          width: '14px', height: '20px', padding: 0, border: 'none', borderRadius: '2px',
-                          backgroundColor: 'transparent',
-                          color: canMoveUp ? (darkMode ? '#aaa' : '#666') : (darkMode ? '#444' : '#ddd'),
-                          cursor: canMoveUp ? 'pointer' : 'default',
-                          fontSize: '8px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                        title="Move up"
-                      >▲</button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); if (canMoveDown) moveLayerInContainer(row, 'down'); }}
-                        style={{
-                          width: '14px', height: '20px', padding: 0, border: 'none', borderRadius: '2px',
-                          backgroundColor: 'transparent',
-                          color: canMoveDown ? (darkMode ? '#aaa' : '#666') : (darkMode ? '#444' : '#ddd'),
-                          cursor: canMoveDown ? 'pointer' : 'default',
-                          fontSize: '8px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        }}
-                        title="Move down"
-                      >▼</button>
-                    </span>
-                  )}
                 </div>
               );
             })}

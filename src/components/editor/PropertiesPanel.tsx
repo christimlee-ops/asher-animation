@@ -310,48 +310,89 @@ export default function PropertiesPanel({
 
     const target = dropTarget.obj;
     const pos = dropTarget.position;
+    const dragParent = (dragItem as any).group as fabric.Group | undefined;
+    const targetParent = (target as any).group as fabric.Group | undefined;
 
     if (pos === 'into') {
       // Drop into group
       const isTargetGroup = target instanceof fabric.Group && !(target instanceof fabric.ActiveSelection);
-      if (isTargetGroup) {
-        canvas.remove(dragItem);
-        (target as fabric.Group).add(dragItem);
-        (target as fabric.Group).setCoords();
+      if (isTargetGroup && target !== dragParent) {
+        const tgtGroup = target as fabric.Group;
+        // Save absolute position before removing
+        const mat = dragItem.calcTransformMatrix();
+        const absCenter = new fabric.Point(mat[4], mat[5]);
+
+        if (dragParent) {
+          dragParent.remove(dragItem);
+          dragParent.dirty = true;
+          dragParent.setCoords();
+          try { (dragParent as any)._calcBounds(); } catch (_) {}
+        } else {
+          canvas.remove(dragItem);
+        }
+
+        // Convert to target group's local space
+        const gMat = tgtGroup.calcTransformMatrix();
+        const inv = fabric.util.invertTransform(gMat);
+        const local = fabric.util.transformPoint(absCenter, inv);
+        dragItem.left = local.x;
+        dragItem.top = local.y;
+        dragItem.setCoords();
+
+        tgtGroup.add(dragItem);
+        tgtGroup.dirty = true;
+        tgtGroup.setCoords();
+        try { (tgtGroup as any)._calcBounds(); } catch (_) {}
+
+        canvas.discardActiveObject();
         canvas.renderAll();
         onSaveHistory();
         refreshLayers();
         setExpandedGroups((prev) => { const next = new Set(prev); next.add(target); return next; });
       }
-    } else {
-      // Reorder within canvas z-order
-      // Canvas: lower index = further back. Our layers list is reversed (top = highest z).
-      // "above" in layers list = higher z-index = later in canvas._objects
-      // "below" in layers list = lower z-index = earlier in canvas._objects
+    } else if (dragParent && !targetParent) {
+      // Dragging from inside a group to top-level — remove from group
+      const mat = dragItem.calcTransformMatrix();
+      dragParent.remove(dragItem);
+      dragParent.dirty = true;
+      dragParent.setCoords();
+      try { (dragParent as any)._calcBounds(); } catch (_) {}
+
+      dragItem.left = mat[4];
+      dragItem.top = mat[5];
+      dragItem.setCoords();
+      canvas.add(dragItem);
+
+      // Now reorder at top level relative to target
       const allObjs = canvas.getObjects();
-      const targetActualIdx = allObjs.indexOf(target);
-
-      if (targetActualIdx === -1) {
-        setDragItem(null);
-        setDropTarget(null);
-        return;
+      const targetIdx = allObjs.indexOf(target);
+      if (targetIdx !== -1) {
+        const destIdx = pos === 'above' ? targetIdx + 1 : targetIdx;
+        canvas.moveObjectTo(dragItem, destIdx);
       }
 
-      // Remove drag item first
-      canvas.remove(dragItem);
-
-      // Recalculate target index after removal
-      const allObjsAfter = canvas.getObjects();
-      const newTargetIdx = allObjsAfter.indexOf(target);
-
-      if (pos === 'above') {
-        // "above" in list = higher z = insert after target in canvas array
-        canvas.insertAt(newTargetIdx + 1, dragItem);
-      } else {
-        // "below" in list = lower z = insert at target's position in canvas array
-        canvas.insertAt(newTargetIdx, dragItem);
+      canvas.discardActiveObject();
+      canvas.renderAll();
+      onSaveHistory();
+      refreshLayers();
+    } else if (dragParent === targetParent) {
+      // Reorder within the SAME container (group or canvas)
+      // Uses moveObjectTo which directly splices _objects without coordinate transforms
+      const container: any = dragParent || canvas;
+      const objs = container.getObjects() as fabric.FabricObject[];
+      const srcIdx = objs.indexOf(dragItem);
+      const tgtIdx = objs.indexOf(target);
+      if (srcIdx !== -1 && tgtIdx !== -1 && srcIdx !== tgtIdx) {
+        // layers list is reversed: "above" in list = higher z = later in _objects
+        let destIdx: number;
+        if (pos === 'above') {
+          destIdx = srcIdx < tgtIdx ? tgtIdx : tgtIdx + 1;
+        } else {
+          destIdx = srcIdx < tgtIdx ? tgtIdx - 1 : tgtIdx;
+        }
+        destIdx = Math.max(0, Math.min(destIdx, objs.length - 1));
+        container.moveObjectTo(dragItem, destIdx);
       }
-
       canvas.renderAll();
       onSaveHistory();
       refreshLayers();
