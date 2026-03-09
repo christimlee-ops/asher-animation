@@ -1014,7 +1014,7 @@ export default function EditorPage() {
                                   }}
                                   title="Double-click to rename"
                                 >
-                                  {asset.original_name}
+                                  {asset.original_name.replace(/\.[^.]+$/, '')}
                                 </div>
                               )}
                               <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3' }}>
