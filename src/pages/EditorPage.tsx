@@ -88,31 +88,7 @@ export default function EditorPage() {
     setShowCategoryPicker(false);
     setPendingImportFile(null);
 
-    const fileIsAudio = /\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(file.name) || file.type.startsWith('audio/');
-
-    // Add to canvas/timeline immediately
-    if (fileIsAudio) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const track: AudioTrack = {
-          id: `audio_${Date.now()}`,
-          name: file.name.replace(/\.[^.]+$/, ''),
-          dataUrl,
-          startFrame: 0,
-          volume: 1,
-        };
-        setAnimState((prev) => ({
-          ...prev,
-          audioTracks: [...(prev.audioTracks || []), track],
-        }));
-      };
-      reader.readAsDataURL(file);
-    } else {
-      canvasRef.current?.importFile(file);
-    }
-
-    // Upload to library with category
+    // Only upload to library — user clicks the asset in the library to add it
     uploadAsset(file, category)
       .then((asset) => {
         setLibraryAssets((prev) => [asset, ...prev]);
