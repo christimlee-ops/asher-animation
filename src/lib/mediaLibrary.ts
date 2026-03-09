@@ -70,6 +70,20 @@ export async function updateAssetCategory(id: number, category: AssetCategory): 
   if (!res.ok) throw new Error('Failed to update asset');
 }
 
+export async function renameAsset(id: number, newName: string): Promise<void> {
+  const token = getToken();
+  const res = await fetch(`${BASE_URL}/assets/${id}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ original_name: newName }),
+  });
+
+  if (!res.ok) throw new Error('Failed to rename asset');
+}
+
 export async function deleteAsset(id: number): Promise<void> {
   const token = getToken();
   const res = await fetch(`${BASE_URL}/assets/${id}`, {

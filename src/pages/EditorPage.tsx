@@ -13,7 +13,7 @@ import type { AnimationState, AudioTrack } from '../lib/animationState';
 import { exportToMp4 } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
-import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES } from '../lib/mediaLibrary';
+import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES } from '../lib/mediaLibrary';
 import type { MediaAsset, AssetCategory } from '../lib/mediaLibrary';
 import { useIsTablet } from '../lib/useMediaQuery';
 import { useAuth } from '../contexts/AuthContext';
@@ -45,6 +45,8 @@ export default function EditorPage() {
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryCategory, setLibraryCategory] = useState<AssetCategory>('characters');
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
+  const [renamingAssetId, setRenamingAssetId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const isTablet = useIsTablet();
   const canvasRef = useRef<CanvasHandle>(null);
 
@@ -185,6 +187,19 @@ export default function EditorPage() {
         );
       })
       .catch(() => alert('Failed to update category'));
+  }, []);
+
+  const handleRenameAsset = useCallback((assetId: number, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) { setRenamingAssetId(null); return; }
+    renameAsset(assetId, trimmed)
+      .then(() => {
+        setLibraryAssets((prev) =>
+          prev.map((a) => a.id === assetId ? { ...a, original_name: trimmed } : a)
+        );
+      })
+      .catch(() => alert('Failed to rename asset'));
+    setRenamingAssetId(null);
   }, []);
 
   const handleExport = useCallback(async () => {
@@ -985,16 +1000,75 @@ export default function EditorPage() {
                             )}
                             {/* Name */}
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{
-                                fontWeight: 700, fontSize: '13px',
-                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                              }}>
-                                {asset.original_name}
-                              </div>
+                              {renamingAssetId === asset.id ? (
+                                <input
+                                  autoFocus
+                                  value={renameValue}
+                                  onChange={(e) => setRenameValue(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleRenameAsset(asset.id, renameValue);
+                                    if (e.key === 'Escape') setRenamingAssetId(null);
+                                  }}
+                                  onBlur={() => handleRenameAsset(asset.id, renameValue)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    width: '100%',
+                                    padding: '4px 8px',
+                                    borderRadius: '6px',
+                                    border: `2px solid #4ECDC4`,
+                                    backgroundColor: darkMode ? 'rgba(255,255,255,0.08)' : '#fff',
+                                    color: darkMode ? '#F5F6FA' : '#2D3436',
+                                    fontSize: '13px',
+                                    fontWeight: 700,
+                                    outline: 'none',
+                                    boxSizing: 'border-box',
+                                  }}
+                                />
+                              ) : (
+                                <div
+                                  style={{
+                                    fontWeight: 700, fontSize: '13px',
+                                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    cursor: 'text',
+                                  }}
+                                  onDoubleClick={(e) => {
+                                    e.stopPropagation();
+                                    setRenamingAssetId(asset.id);
+                                    setRenameValue(asset.original_name);
+                                  }}
+                                  title="Double-click to rename"
+                                >
+                                  {asset.original_name}
+                                </div>
+                              )}
                               <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3' }}>
                                 {(asset.size / 1024).toFixed(0)} KB
                               </div>
                             </div>
+                            {/* Rename button */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (renamingAssetId === asset.id) {
+                                  handleRenameAsset(asset.id, renameValue);
+                                } else {
+                                  setRenamingAssetId(asset.id);
+                                  setRenameValue(asset.original_name);
+                                }
+                              }}
+                              style={{
+                                background: 'none', border: 'none',
+                                color: darkMode ? '#636E72' : '#B2BEC3',
+                                cursor: 'pointer', padding: '4px', borderRadius: '6px', flexShrink: 0,
+                              }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#4ECDC4'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = darkMode ? '#636E72' : '#B2BEC3'; }}
+                              title="Rename"
+                            >
+                              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
+                              </svg>
+                            </button>
                             {/* Edit category */}
                             <button
                               onClick={(e) => {

@@ -90,17 +90,31 @@ router.get('/', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     await ensureCategoryColumn(req.db);
-    const { category } = req.body;
-    if (!VALID_CATEGORIES.includes(category)) {
-      return res.status(400).json({ error: `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}` });
-    }
+    const { category, original_name } = req.body;
     const [rows] = await req.db.execute(
       'SELECT id FROM assets WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]
     );
     if (rows.length === 0) return res.status(404).json({ error: 'Asset not found' });
-    await req.db.execute('UPDATE assets SET category = ? WHERE id = ? AND user_id = ?', [category, req.params.id, req.user.id]);
-    res.json({ message: 'Category updated', category });
+
+    const updates = [];
+    const params = [];
+    if (category) {
+      if (!VALID_CATEGORIES.includes(category)) {
+        return res.status(400).json({ error: `Invalid category. Must be one of: ${VALID_CATEGORIES.join(', ')}` });
+      }
+      updates.push('category = ?');
+      params.push(category);
+    }
+    if (original_name && typeof original_name === 'string' && original_name.trim()) {
+      updates.push('original_name = ?');
+      params.push(original_name.trim());
+    }
+    if (updates.length === 0) return res.status(400).json({ error: 'Nothing to update' });
+
+    params.push(req.params.id, req.user.id);
+    await req.db.execute(`UPDATE assets SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, params);
+    res.json({ message: 'Asset updated', category: category || undefined, original_name: original_name?.trim() || undefined });
   } catch (err) {
     console.error('Update asset error:', err);
     res.status(500).json({ error: 'Failed to update asset' });
