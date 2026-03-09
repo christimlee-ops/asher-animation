@@ -576,6 +576,9 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
       }
 
       // REORDER within same container
+      // Uses moveObjectTo which directly splices _objects without
+      // coordinate transforms (remove+insertAt triggers exitGroup/enterGroup
+      // which converts coordinates and breaks positions).
       if (srcParent === tgtRow.parentGroup) {
         const container: any = srcParent || cv;
         const objs = container.getObjects() as fabric.FabricObject[];
@@ -583,22 +586,15 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
         const ti = objs.indexOf(tgtRow.obj);
         if (si === -1 || ti === -1 || si === ti) return;
 
-        // Remove then re-insert at correct position
-        container.remove(srcObj);
-        const afterRemove = container.getObjects() as fabric.FabricObject[];
-        let ins = afterRemove.indexOf(tgtRow.obj);
-        if (ins === -1) ins = 0;
-        if (target.position === 'after') ins++;
-        container.insertAt(ins, srcObj);
+        // Calculate target index: moveObjectTo first removes then inserts
+        let destIdx = ti;
+        if (target.position === 'after' && si < ti) destIdx = ti;
+        else if (target.position === 'after' && si > ti) destIdx = ti + 1;
+        else if (target.position === 'before' && si < ti) destIdx = ti - 1;
+        else if (target.position === 'before' && si > ti) destIdx = ti;
 
-        if (container instanceof fabric.Group) {
-          container.dirty = true;
-          container.setCoords();
-          try { (container as any)._calcBounds(); } catch (_) {}
-        }
-        cv.discardActiveObject();
+        container.moveObjectTo(srcObj, destIdx);
         cv.renderAll();
-        onAnimStateChangeRef.current({ ...animStateRef.current });
         forceUpdate((n) => n + 1);
         return;
       }
@@ -609,6 +605,9 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   }, [ROW_H]);
 
   // ─── Move layer up/down within its container ───────────────────
+  // Uses moveObjectTo which directly splices _objects without
+  // coordinate transforms (unlike remove+insertAt which converts
+  // coordinates through exitGroup/enterGroup).
   const moveLayerInContainer = useCallback((row: TimelineRow, direction: 'up' | 'down') => {
     if (!canvas) return;
     const container: any = row.parentGroup || canvas;
@@ -618,19 +617,10 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     const newIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (newIdx < 0 || newIdx >= objs.length) return;
 
-    container.remove(row.obj);
-    container.insertAt(newIdx, row.obj);
-
-    if (container instanceof fabric.Group) {
-      container.dirty = true;
-      container.setCoords();
-      try { (container as any)._calcBounds(); } catch (_) {}
-    }
-    canvas.discardActiveObject();
+    container.moveObjectTo(row.obj, newIdx);
     canvas.renderAll();
-    onAnimStateChange({ ...animState });
     forceUpdate((n) => n + 1);
-  }, [canvas, animState, onAnimStateChange]);
+  }, [canvas]);
 
   // ─── FPS / Duration controls ───────────────────────────────────
   const setFps = (newFps: number) => {
