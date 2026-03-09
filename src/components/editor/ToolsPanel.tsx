@@ -79,7 +79,7 @@ export default function ToolsPanel({
   darkMode,
   compact = false,
 }: ToolsPanelProps) {
-  const panelBg = darkMode ? '#16213e' : '#fff';
+  const panelBg = darkMode ? '#16213e' : '#f0f1f3';
   const textColor = darkMode ? '#F5F6FA' : '#2D3436';
   const sectionBorder = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
 

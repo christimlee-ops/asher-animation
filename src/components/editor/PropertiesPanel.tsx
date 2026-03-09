@@ -413,7 +413,7 @@ export default function PropertiesPanel({
     });
   };
 
-  const panelBg = darkMode ? '#16213e' : '#fff';
+  const panelBg = darkMode ? '#16213e' : '#f0f1f3';
   const textColor = darkMode ? '#F5F6FA' : '#2D3436';
   const inputBg = darkMode ? 'rgba(255,255,255,0.08)' : '#F5F6FA';
   const borderColor = darkMode ? 'rgba(255,255,255,0.12)' : '#DFE6E9';
@@ -488,7 +488,7 @@ export default function PropertiesPanel({
       flexShrink: 0,
     }) as React.CSSProperties,
     pickerDropdown: {
-      backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+      backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
       borderRadius: '12px',
       boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
       zIndex: 200,

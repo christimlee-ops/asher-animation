@@ -608,7 +608,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   };
 
   // ─── Styles ────────────────────────────────────────────────────
-  const bg = darkMode ? '#1a1a2e' : '#fff';
+  const bg = darkMode ? '#1a1a2e' : '#f0f1f3';
   const text = darkMode ? '#F5F6FA' : '#2D3436';
   const border = darkMode ? 'rgba(255,255,255,0.08)' : '#DFE6E9';
   const accent = '#4ECDC4';
@@ -847,8 +847,8 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                       e.stopPropagation();
                       row.obj.visible = row.obj.visible === false ? true : false;
                       row.obj.dirty = true;
-                      canvas.renderAll();
-                      forceUpdate();
+                      canvas?.renderAll();
+                      forceUpdate((n) => n + 1);
                     }}
                     style={{
                       cursor: 'pointer',

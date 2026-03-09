@@ -168,7 +168,7 @@ export default function TopBar({
               right: 8,
               top: '100%',
               zIndex: 999,
-              backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+              backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
               borderRadius: '12px',
               boxShadow: '0 8px 30px rgba(0,0,0,0.25)',
               padding: '6px',

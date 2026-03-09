@@ -74,7 +74,9 @@ export async function exportToMp4({
         applyAnimToObjects((obj as fabric.Group).getObjects(), f);
         obj.dirty = true;
         obj.setCoords();
-        try { (obj as any)._calcBounds(); } catch (_) { /* may not exist on all Group instances */ }
+        if (typeof (obj as any)._calcBounds === 'function') {
+          (obj as any)._calcBounds();
+        }
       }
     }
   };

@@ -414,7 +414,7 @@ export default function EditorPage() {
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '8px 12px',
-            backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+            backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
             borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : '#DFE6E9'}`,
           }}>
             <span style={{ fontSize: '13px', fontWeight: 800, color: darkMode ? '#F5F6FA' : '#2D3436' }}>Properties</span>
@@ -454,7 +454,7 @@ export default function EditorPage() {
             justifyContent: 'space-between',
             padding: '0 12px',
             height: '28px',
-            backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+            backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
             borderBottom: timelineCollapsed ? 'none' : `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : '#DFE6E9'}`,
             cursor: 'pointer',
             userSelect: 'none',
@@ -507,7 +507,7 @@ export default function EditorPage() {
         >
           <div
             style={{
-              backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+              backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
               borderRadius: '16px',
               padding: '24px',
               minWidth: '380px',
@@ -574,7 +574,7 @@ export default function EditorPage() {
         >
           <div
             style={{
-              backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+              backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
               borderRadius: '16px',
               padding: '24px',
               minWidth: '400px',
@@ -692,7 +692,7 @@ export default function EditorPage() {
         >
           <div
             style={{
-              backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+              backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
               borderRadius: '16px',
               padding: '24px',
               minWidth: '380px',
