@@ -350,34 +350,36 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
 
   // ─── Audio playback sync ─────────────────────────────────────
   const audioTracks = animState.audioTracks || [];
-
-  // Stable track IDs + dataUrls for creating audio elements (only when tracks are added/removed)
   const audioTrackIds = audioTracks.map((t) => t.id).join(',');
+  const isPlayingRef = useRef(isPlaying);
+  isPlayingRef.current = isPlaying;
 
   // Create/remove audio elements only when track list changes
   useEffect(() => {
     const map = audioElementsRef.current;
     const currentIds = new Set(audioTrackIds.split(',').filter(Boolean));
-    // Add new tracks
     for (const track of animState.audioTracks || []) {
       if (!map.has(track.id)) {
-        const audio = new Audio(track.dataUrl);
+        const audio = new Audio();
+        audio.src = track.dataUrl;
         audio.volume = track.volume;
         audio.preload = 'auto';
+        // Force load so duration is available
+        audio.load();
         map.set(track.id, audio);
       }
     }
-    // Remove deleted tracks
     for (const [id, audio] of map.entries()) {
       if (!currentIds.has(id)) {
         audio.pause();
+        audio.src = '';
         map.delete(id);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioTrackIds]);
 
-  // Update volume when it changes
+  // Update volume
   useEffect(() => {
     const map = audioElementsRef.current;
     for (const track of audioTracks) {
@@ -386,28 +388,51 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     }
   }, [audioTracks]);
 
-  // Play/pause audio with animation
+  // Play/pause audio with animation — use a ref-based approach so audio stays in sync
   useEffect(() => {
     const map = audioElementsRef.current;
     const tracks = animState.audioTracks || [];
+
     if (isPlaying) {
+      // Start all audio tracks at correct offset
       for (const track of tracks) {
         const audio = map.get(track.id);
         if (!audio) continue;
         const offsetFrames = currentFrame - track.startFrame;
         const offsetSec = offsetFrames / fps;
-        if (offsetFrames >= 0 && offsetSec < (audio.duration || Infinity)) {
-          audio.currentTime = offsetSec;
-          audio.play().catch(() => {});
+
+        const startAudio = () => {
+          if (!isPlayingRef.current) return;
+          if (offsetFrames >= 0) {
+            audio.currentTime = offsetSec;
+            audio.play().catch((err) => console.warn('Audio play failed:', err));
+          }
+        };
+
+        // If audio is ready, play immediately; otherwise wait for it to load
+        if (audio.readyState >= 2) {
+          startAudio();
+        } else {
+          audio.addEventListener('canplay', startAudio, { once: true });
         }
       }
     } else {
-      // Pause all audio when playback stops
+      // Pause all
       for (const [, audio] of map.entries()) {
-        audio.pause();
+        if (!audio.paused) audio.pause();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
+
+  // Stop audio when animation ends (playback stops at last keyframe)
+  useEffect(() => {
+    if (!isPlaying) {
+      const map = audioElementsRef.current;
+      for (const [, audio] of map.entries()) {
+        if (!audio.paused) audio.pause();
+      }
+    }
   }, [isPlaying]);
 
   // Sync audio time on scrub (when not playing)
@@ -416,9 +441,11 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     const map = audioElementsRef.current;
     for (const track of animState.audioTracks || []) {
       const audio = map.get(track.id);
-      if (!audio) continue;
+      if (!audio || audio.readyState < 2) continue;
       const offsetSec = (currentFrame - track.startFrame) / fps;
-      audio.currentTime = Math.max(0, offsetSec);
+      if (offsetSec >= 0) {
+        audio.currentTime = offsetSec;
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentFrame]);
