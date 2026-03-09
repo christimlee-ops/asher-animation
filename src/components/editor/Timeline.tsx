@@ -873,25 +873,27 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {isGroup ? (isDragInto ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
                   </span>
-                  {isSelected && (canMoveUp || canMoveDown) && (
-                    <span style={{ display: 'flex', gap: '1px', marginLeft: '2px', flexShrink: 0 }}>
+                  {(canMoveUp || canMoveDown) && (
+                    <span style={{ display: 'flex', gap: '0px', marginLeft: 'auto', flexShrink: 0 }}>
                       <button
                         onClick={(e) => { e.stopPropagation(); if (canMoveUp) moveLayerInContainer(row, 'up'); }}
                         style={{
-                          width: '16px', height: '16px', padding: 0, border: 'none', borderRadius: '3px',
-                          backgroundColor: canMoveUp ? (darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') : 'transparent',
-                          color: canMoveUp ? text : dimText, cursor: canMoveUp ? 'pointer' : 'default',
-                          fontSize: '9px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '14px', height: '20px', padding: 0, border: 'none', borderRadius: '2px',
+                          backgroundColor: 'transparent',
+                          color: canMoveUp ? (darkMode ? '#aaa' : '#666') : (darkMode ? '#444' : '#ddd'),
+                          cursor: canMoveUp ? 'pointer' : 'default',
+                          fontSize: '8px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
                         title="Move up"
                       >▲</button>
                       <button
                         onClick={(e) => { e.stopPropagation(); if (canMoveDown) moveLayerInContainer(row, 'down'); }}
                         style={{
-                          width: '16px', height: '16px', padding: 0, border: 'none', borderRadius: '3px',
-                          backgroundColor: canMoveDown ? (darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') : 'transparent',
-                          color: canMoveDown ? text : dimText, cursor: canMoveDown ? 'pointer' : 'default',
-                          fontSize: '9px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          width: '14px', height: '20px', padding: 0, border: 'none', borderRadius: '2px',
+                          backgroundColor: 'transparent',
+                          color: canMoveDown ? (darkMode ? '#aaa' : '#666') : (darkMode ? '#444' : '#ddd'),
+                          cursor: canMoveDown ? 'pointer' : 'default',
+                          fontSize: '8px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         }}
                         title="Move down"
                       >▼</button>
