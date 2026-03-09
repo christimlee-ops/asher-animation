@@ -71,9 +71,13 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const labelColRef = useRef<HTMLDivElement | null>(null);
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
 
+  // Timeline zoom
+  const [frameZoom, setFrameZoom] = useState(5); // pixels per frame
+  const [rowZoom, setRowZoom] = useState(20);     // row height in pixels
+
   const { fps, totalFrames } = animState;
-  const FRAME_W = 8;
-  const ROW_H = 26;
+  const FRAME_W = frameZoom;
+  const ROW_H = rowZoom;
   const LABEL_W = 100;
   const totalW = totalFrames * FRAME_W;
 
@@ -793,6 +797,28 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
         >
           {[5, 10, 15, 20, 30, 60].map((s) => <option key={s} value={s}>{s}s</option>)}
         </select>
+
+        <span style={{ fontSize: '10px', color: dimText, marginLeft: '4px' }}>Zoom:</span>
+        <button
+          onClick={() => setFrameZoom((z) => Math.max(2, z - 1))}
+          style={{ ...btnBase, fontSize: '10px', padding: '2px 5px' }}
+          title="Zoom out timeline"
+        >−</button>
+        <button
+          onClick={() => setFrameZoom((z) => Math.min(16, z + 1))}
+          style={{ ...btnBase, fontSize: '10px', padding: '2px 5px' }}
+          title="Zoom in timeline"
+        >+</button>
+        <button
+          onClick={() => setRowZoom((z) => Math.max(14, z - 2))}
+          style={{ ...btnBase, fontSize: '10px', padding: '2px 5px' }}
+          title="Shrink rows"
+        >↕−</button>
+        <button
+          onClick={() => setRowZoom((z) => Math.min(32, z + 2))}
+          style={{ ...btnBase, fontSize: '10px', padding: '2px 5px' }}
+          title="Expand rows"
+        >↕+</button>
       </div>
 
       {/* Timeline body — single scroll container for labels + frames */}
@@ -911,6 +937,12 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
           }}
           style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative', cursor: isScrubbing ? 'ew-resize' : 'default' }}
           onMouseDown={handleScrubMouseDown}
+          onWheel={(e) => {
+            if (e.ctrlKey || e.metaKey) {
+              e.preventDefault();
+              setFrameZoom((z) => Math.min(16, Math.max(2, z + (e.deltaY < 0 ? 1 : -1))));
+            }
+          }}
           onScroll={() => {
             // Sync label column vertical scroll with frame area
             if (scrollBodyRef.current && labelColRef.current) {
