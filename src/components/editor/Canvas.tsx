@@ -59,6 +59,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
     const gridLinesRef = useRef<fabric.FabricObject[]>([]);
     const isPanningRef = useRef(false);
     const lastPanPosRef = useRef<{ x: number; y: number } | null>(null);
+    const clipboardRef = useRef<fabric.FabricObject | null>(null);
 
     // Custom properties to always include in serialization
     const CUSTOM_PROPS = ['_animId', 'customName', '_locked'];
@@ -403,6 +404,66 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         }
         if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
         if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+        // Copy
+        if (e.ctrlKey && e.key === 'c') {
+          const active = fc.getActiveObject();
+          if (active) {
+            e.preventDefault();
+            active.clone().then((cloned: fabric.FabricObject) => {
+              clipboardRef.current = cloned;
+            });
+          }
+        }
+        // Paste
+        if (e.ctrlKey && e.key === 'v') {
+          if (clipboardRef.current) {
+            e.preventDefault();
+            clipboardRef.current.clone().then((cloned: fabric.FabricObject) => {
+              cloned.set({
+                left: (cloned.left || 0) + 20,
+                top: (cloned.top || 0) + 20,
+              });
+              // Ungroup ActiveSelection items when pasting multi-select
+              if (cloned instanceof fabric.ActiveSelection) {
+                cloned.forEachObject((obj: fabric.FabricObject) => {
+                  fc.add(obj);
+                });
+                fc.setActiveObject(cloned);
+              } else {
+                fc.add(cloned);
+                fc.setActiveObject(cloned);
+              }
+              // Update clipboard position so successive pastes cascade
+              clipboardRef.current!.set({
+                left: (clipboardRef.current!.left || 0) + 20,
+                top: (clipboardRef.current!.top || 0) + 20,
+              });
+              fc.renderAll();
+              saveHistory();
+            });
+          }
+        }
+        // Duplicate shortcut (Ctrl+D)
+        if (e.ctrlKey && e.key === 'd') {
+          e.preventDefault();
+          const active = fc.getActiveObject();
+          if (active) {
+            active.clone().then((cloned: fabric.FabricObject) => {
+              cloned.set({ left: (cloned.left || 0) + 20, top: (cloned.top || 0) + 20 });
+              if (cloned instanceof fabric.ActiveSelection) {
+                cloned.forEachObject((obj: fabric.FabricObject) => {
+                  fc.add(obj);
+                });
+                fc.setActiveObject(cloned);
+              } else {
+                fc.add(cloned);
+                fc.setActiveObject(cloned);
+              }
+              fc.renderAll();
+              saveHistory();
+            });
+          }
+        }
       };
       window.addEventListener('keydown', handleKeyDown);
 
