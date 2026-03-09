@@ -351,61 +351,70 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   // ─── Audio playback sync ─────────────────────────────────────
   const audioTracks = animState.audioTracks || [];
 
-  // Create/update audio elements when tracks change
+  // Stable track IDs + dataUrls for creating audio elements (only when tracks are added/removed)
+  const audioTrackIds = audioTracks.map((t) => t.id).join(',');
+
+  // Create/remove audio elements only when track list changes
   useEffect(() => {
     const map = audioElementsRef.current;
+    const currentIds = new Set(audioTrackIds.split(',').filter(Boolean));
     // Add new tracks
-    for (const track of audioTracks) {
+    for (const track of animState.audioTracks || []) {
       if (!map.has(track.id)) {
         const audio = new Audio(track.dataUrl);
         audio.volume = track.volume;
         audio.preload = 'auto';
         map.set(track.id, audio);
-      } else {
-        const audio = map.get(track.id)!;
-        audio.volume = track.volume;
       }
     }
     // Remove deleted tracks
-    const trackIds = new Set(audioTracks.map((t) => t.id));
     for (const [id, audio] of map.entries()) {
-      if (!trackIds.has(id)) {
+      if (!currentIds.has(id)) {
         audio.pause();
         map.delete(id);
       }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audioTrackIds]);
+
+  // Update volume when it changes
+  useEffect(() => {
+    const map = audioElementsRef.current;
+    for (const track of audioTracks) {
+      const audio = map.get(track.id);
+      if (audio) audio.volume = track.volume;
     }
   }, [audioTracks]);
 
   // Play/pause audio with animation
   useEffect(() => {
     const map = audioElementsRef.current;
-    for (const track of audioTracks) {
-      const audio = map.get(track.id);
-      if (!audio) continue;
-      const offsetFrames = currentFrame - track.startFrame;
-      const offsetSec = offsetFrames / fps;
-      if (isPlaying && offsetFrames >= 0) {
-        if (audio.paused) {
+    const tracks = animState.audioTracks || [];
+    if (isPlaying) {
+      for (const track of tracks) {
+        const audio = map.get(track.id);
+        if (!audio) continue;
+        const offsetFrames = currentFrame - track.startFrame;
+        const offsetSec = offsetFrames / fps;
+        if (offsetFrames >= 0 && offsetSec < (audio.duration || Infinity)) {
           audio.currentTime = offsetSec;
           audio.play().catch(() => {});
         }
-      } else {
+      }
+    } else {
+      // Pause all audio when playback stops
+      for (const [, audio] of map.entries()) {
         audio.pause();
-        if (offsetFrames >= 0) {
-          audio.currentTime = offsetSec;
-        } else {
-          audio.currentTime = 0;
-        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying]);
 
-  // Sync audio time on scrub
+  // Sync audio time on scrub (when not playing)
   useEffect(() => {
-    if (isPlaying) return; // playback handles its own sync
+    if (isPlaying) return;
     const map = audioElementsRef.current;
-    for (const track of audioTracks) {
+    for (const track of animState.audioTracks || []) {
       const audio = map.get(track.id);
       if (!audio) continue;
       const offsetSec = (currentFrame - track.startFrame) / fps;
