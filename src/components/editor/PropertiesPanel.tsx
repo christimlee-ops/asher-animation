@@ -743,12 +743,23 @@ export default function PropertiesPanel({
                           onClick={() => {
                             const obj = canvas?.getActiveObject();
                             if (!obj || !canvas) return;
-                            const center = obj.getCenterPoint();
+                            const curOx = String(obj.originX);
+                            const curOy = String(obj.originY);
+                            // Use translateToGivenOrigin to convert left/top
+                            // from current origin to new origin — works for group children too
+                            const pos = new fabric.Point(obj.left || 0, obj.top || 0);
+                            const newPos = obj.translateToGivenOrigin(pos, curOx as any, curOy as any, ox as any, oy as any);
                             obj.originX = ox;
                             obj.originY = oy;
-                            obj.setPositionByOrigin(center, 'center', 'center');
+                            obj.left = newPos.x;
+                            obj.top = newPos.y;
                             obj.dirty = true;
                             obj.setCoords();
+                            // Re-render parent group if inside one
+                            if (obj.group) {
+                              obj.group.dirty = true;
+                              obj.group.setCoords();
+                            }
                             setPivotX(ox);
                             setPivotY(oy);
                             canvas.requestRenderAll();
