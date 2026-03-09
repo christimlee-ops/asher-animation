@@ -55,37 +55,31 @@ export default function EditorPage() {
   const handleImport = useCallback(() => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.svg,.png,.jpg,.jpeg,.gif,.webp';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) canvasRef.current?.importFile(file);
-    };
-    input.click();
-  }, []);
-
-  const handleImportAudio = useCallback(() => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.mp3,.wav,.ogg,.m4a,.aac,.webm';
+    input.accept = '.svg,.png,.jpg,.jpeg,.gif,.webp,.mp3,.wav,.ogg,.m4a,.aac';
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        const track: AudioTrack = {
-          id: `audio_${Date.now()}`,
-          name: file.name.replace(/\.[^.]+$/, ''),
-          dataUrl,
-          startFrame: 0,
-          volume: 1,
+      const isAudio = /\.(mp3|wav|ogg|m4a|aac|webm)$/i.test(file.name) || file.type.startsWith('audio/');
+      if (isAudio) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          const track: AudioTrack = {
+            id: `audio_${Date.now()}`,
+            name: file.name.replace(/\.[^.]+$/, ''),
+            dataUrl,
+            startFrame: 0,
+            volume: 1,
+          };
+          setAnimState((prev) => ({
+            ...prev,
+            audioTracks: [...(prev.audioTracks || []), track],
+          }));
         };
-        setAnimState((prev) => ({
-          ...prev,
-          audioTracks: [...(prev.audioTracks || []), track],
-        }));
-      };
-      reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+      } else {
+        canvasRef.current?.importFile(file);
+      }
     };
     input.click();
   }, []);
@@ -360,7 +354,6 @@ export default function EditorPage() {
           canRedo={canRedo}
           projectName={projectName}
           compact={isTablet}
-          onImportAudio={handleImportAudio}
           isOwner={isOwner}
         />
       </div>

@@ -16,7 +16,6 @@ interface TopBarProps {
   canRedo: boolean;
   projectName: string;
   compact?: boolean;
-  onImportAudio?: () => void;
   isOwner?: boolean;
 }
 
@@ -35,7 +34,6 @@ export default function TopBar({
   canRedo,
   projectName,
   compact = false,
-  onImportAudio,
   isOwner = true,
 }: TopBarProps) {
   const { user, logout } = useAuth();
@@ -183,7 +181,6 @@ export default function TopBar({
                 { label: '📂 Open', action: onOpen },
                 ...(isOwner ? [{ label: '💾 Save', action: onSave }] : []),
                 { label: '📋 Save As', action: onSaveAs },
-                { label: '🎵 Import Audio', action: onImportAudio || (() => {}) },
                 { label: exporting ? '⏳ Exporting...' : '🎬 Export', action: onExport, disabled: exporting },
                 { label: `👤 ${displayName}`, action: () => {}, disabled: true },
                 { label: '🚪 Logout', action: logout },
@@ -241,9 +238,6 @@ export default function TopBar({
         )}
         <button style={styles.btn()} onClick={onSaveAs} onMouseEnter={hover} onMouseLeave={unhover}>
           📋 Save As
-        </button>
-        <button style={styles.btn()} onClick={onImportAudio} onMouseEnter={hover} onMouseLeave={unhover}>
-          🎵 Audio
         </button>
         <button
           style={styles.btn(exporting)}
