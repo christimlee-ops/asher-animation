@@ -653,16 +653,6 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         if (shape) {
           fc.add(shape);
           tempShapeRef.current = shape;
-          if (activeTool === 'text') {
-            // Place immediately
-            isDrawingShapeRef.current = false;
-            shape.selectable = true;
-            shape.evented = true;
-            fc.setActiveObject(shape);
-            (shape as fabric.IText).enterEditing();
-            fc.renderAll();
-            saveHistory();
-          }
         }
       };
 
@@ -708,6 +698,12 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           case 'line':
             (shape as fabric.Line).set({ x2: px, y2: py });
             break;
+          case 'text': {
+            // Scale font size based on drag height, reposition to top-left
+            const fontSize = Math.max(12, h);
+            shape.set({ left: Math.min(sx, px), top: Math.min(sy, py), fontSize });
+            break;
+          }
         }
         fc.renderAll();
       };
