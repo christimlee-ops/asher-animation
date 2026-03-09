@@ -406,119 +406,187 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingKf, totalFrames, FRAME_W, animState, onAnimStateChange]);
 
-  // ─── Custom mouse-based layer drag ─────────────────────────────
-  const [layerDrag, setLayerDrag] = useState<{ sourceId: string; startY: number } | null>(null);
-  const [layerDragOverId, setLayerDragOverId] = useState<string | null>(null);
-  const layerDragActive = useRef(false);
+  // ─── Layer drag-and-drop system ─────────────────────────────────
+  // All state is tracked via refs to avoid stale closures.
+  // Only `dropIndicator` uses useState for rendering the visual feedback.
+  const layerDragRef = useRef<{ sourceId: string; startY: number; active: boolean } | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<{
+    targetId: string;
+    position: 'before' | 'after' | 'into';
+  } | null>(null);
 
-  useEffect(() => {
-    if (!layerDrag) return;
-    const handleMove = (e: MouseEvent) => {
-      // Only start "real" drag after moving a few pixels
-      if (!layerDragActive.current && Math.abs(e.clientY - layerDrag.startY) > 4) {
-        layerDragActive.current = true;
-      }
-      if (!layerDragActive.current) return;
+  // Refs that always hold the latest values for use inside event handlers
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  const canvasRef = useRef(canvas);
+  canvasRef.current = canvas;
+  const animStateRef = useRef(animState);
+  animStateRef.current = animState;
+  const onAnimStateChangeRef = useRef(onAnimStateChange);
+  onAnimStateChangeRef.current = onAnimStateChange;
 
-      // Find which label row the mouse is over
-      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-      const rowEl = el?.closest('[data-timeline-id]') as HTMLElement | null;
-      if (rowEl) {
-        const targetId = rowEl.getAttribute('data-timeline-id');
-        if (targetId && targetId !== layerDrag.sourceId) {
-          setLayerDragOverId(targetId);
-        } else {
-          setLayerDragOverId(null);
-        }
+  const getDropTarget = useCallback((e: MouseEvent): { targetId: string; position: 'before' | 'after' | 'into' } | null => {
+    const labelCol = labelColRef.current;
+    const drag = layerDragRef.current;
+    if (!labelCol || !drag) return null;
+
+    const rect = labelCol.getBoundingClientRect();
+    const relY = e.clientY - rect.top + labelCol.scrollTop;
+    const rowIdx = Math.floor(relY / ROW_H);
+    const currentRows = rowsRef.current;
+
+    if (rowIdx < 0 || rowIdx >= currentRows.length) return null;
+
+    const targetRow = currentRows[rowIdx];
+    const targetId = (targetRow.obj as any)._animId as string;
+    if (targetId === drag.sourceId) return null;
+
+    const yInRow = relY - rowIdx * ROW_H;
+    const isTargetGroup = targetRow.obj instanceof fabric.Group && !(targetRow.obj instanceof fabric.ActiveSelection);
+
+    let position: 'before' | 'after' | 'into';
+    if (isTargetGroup) {
+      if (yInRow < ROW_H / 3) position = 'before';
+      else if (yInRow > (ROW_H * 2) / 3) position = 'after';
+      else position = 'into';
+    } else {
+      position = yInRow < ROW_H / 2 ? 'before' : 'after';
+    }
+    return { targetId, position };
+  }, [ROW_H]);
+
+  const executeLayerDrop = useCallback((sourceId: string, targetId: string, position: 'before' | 'after' | 'into') => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const currentRows = rowsRef.current;
+    const sourceRow = currentRows.find((r) => (r.obj as any)._animId === sourceId);
+    const targetRow = currentRows.find((r) => (r.obj as any)._animId === targetId);
+    if (!sourceRow || !targetRow) return;
+
+    const sourceObj = sourceRow.obj;
+    const sourceParent = sourceRow.parentGroup;
+    const isTargetGroup = targetRow.obj instanceof fabric.Group && !(targetRow.obj instanceof fabric.ActiveSelection);
+
+    // ── DROP INTO GROUP ──
+    if (position === 'into' && isTargetGroup && targetRow.obj !== sourceParent) {
+      const targetGroup = targetRow.obj as fabric.Group;
+      const srcAbsMatrix = sourceObj.calcTransformMatrix();
+      const srcCenter = new fabric.Point(srcAbsMatrix[4], srcAbsMatrix[5]);
+
+      if (sourceParent) {
+        sourceParent.remove(sourceObj);
+        sourceParent.dirty = true;
+        sourceParent.setCoords();
+        try { (sourceParent as any)._calcBounds(); } catch (_) {}
       } else {
-        setLayerDragOverId(null);
+        cv.remove(sourceObj);
       }
-    };
 
-    const handleUp = () => {
-      if (layerDragActive.current && layerDragOverId) {
-        // Perform the move
-        const sourceRow = rows.find((r) => (r.obj as any)._animId === layerDrag.sourceId);
-        const targetRow = rows.find((r) => (r.obj as any)._animId === layerDragOverId);
-        if (sourceRow && targetRow && canvas) {
-          const isTargetGroup = targetRow.obj instanceof fabric.Group && !(targetRow.obj instanceof fabric.ActiveSelection);
-          if (isTargetGroup && targetRow.obj !== sourceRow.parentGroup) {
-            moveToGroup(sourceRow.obj, sourceRow.parentGroup, targetRow.obj as fabric.Group);
-          } else if (!isTargetGroup && sourceRow.parentGroup && targetRow.depth === 0) {
-            removeFromGroup(sourceRow.obj, sourceRow.parentGroup);
-          }
-        }
-      }
-      layerDragActive.current = false;
-      setLayerDrag(null);
-      setLayerDragOverId(null);
-    };
+      const groupMatrix = targetGroup.calcTransformMatrix();
+      const invGroupMatrix = fabric.util.invertTransform(groupMatrix);
+      const localPoint = fabric.util.transformPoint(srcCenter, invGroupMatrix);
+      sourceObj.left = localPoint.x;
+      sourceObj.top = localPoint.y;
+      sourceObj.setCoords();
 
-    window.addEventListener('mousemove', handleMove);
-    window.addEventListener('mouseup', handleUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMove);
-      window.removeEventListener('mouseup', handleUp);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layerDrag, layerDragOverId, rows, canvas]);
+      targetGroup.add(sourceObj);
+      targetGroup.dirty = true;
+      targetGroup.setCoords();
+      try { (targetGroup as any)._calcBounds(); } catch (_) {}
 
-  // ─── Move layers into/out of groups ────────────────────────────
-  const moveToGroup = useCallback((sourceObj: fabric.FabricObject, sourceParent: fabric.Group | null, targetGroup: fabric.Group) => {
-    if (!canvas) return;
-    // Get source's absolute position
-    const srcAbsMatrix = sourceObj.calcTransformMatrix();
-    const srcCenter = new fabric.Point(srcAbsMatrix[4], srcAbsMatrix[5]);
+      cv.discardActiveObject();
+      cv.renderAll();
+      onAnimStateChangeRef.current({ ...animStateRef.current });
+      forceUpdate((n) => n + 1);
+      return;
+    }
 
-    // Remove from current location
-    if (sourceParent) {
+    // ── REMOVE FROM GROUP (drag to top-level item) ──
+    if (sourceParent && !targetRow.parentGroup && targetRow.depth === 0 && position !== 'into') {
+      const srcAbsMatrix = sourceObj.calcTransformMatrix();
+
       sourceParent.remove(sourceObj);
       sourceParent.dirty = true;
       sourceParent.setCoords();
       try { (sourceParent as any)._calcBounds(); } catch (_) {}
-    } else {
-      canvas.remove(sourceObj);
+
+      sourceObj.left = srcAbsMatrix[4];
+      sourceObj.top = srcAbsMatrix[5];
+      sourceObj.setCoords();
+
+      cv.add(sourceObj);
+      cv.discardActiveObject();
+      cv.renderAll();
+      onAnimStateChangeRef.current({ ...animStateRef.current });
+      forceUpdate((n) => n + 1);
+      return;
     }
 
-    // Convert absolute position to target group's local space
-    const groupMatrix = targetGroup.calcTransformMatrix();
-    const invGroupMatrix = fabric.util.invertTransform(groupMatrix);
-    const localPoint = fabric.util.transformPoint(srcCenter, invGroupMatrix);
+    // ── REORDER WITHIN SAME CONTAINER ──
+    if (sourceParent === targetRow.parentGroup) {
+      const container = sourceParent || cv;
+      const objs = (container as any).getObjects() as fabric.FabricObject[];
+      const srcIdx = objs.indexOf(sourceObj);
+      const tgtIdx = objs.indexOf(targetRow.obj);
+      if (srcIdx === -1 || tgtIdx === -1 || srcIdx === tgtIdx) return;
 
-    sourceObj.left = localPoint.x;
-    sourceObj.top = localPoint.y;
-    sourceObj.setCoords();
+      // Use internal _objects array directly for reliable reorder
+      const internalArr: fabric.FabricObject[] = (container as any)._objects;
+      if (!internalArr) return;
+      // Remove source from its current position
+      internalArr.splice(srcIdx, 1);
+      // Calculate new insert position
+      let insertIdx = internalArr.indexOf(targetRow.obj);
+      if (insertIdx === -1) return;
+      if (position === 'after') insertIdx++;
+      internalArr.splice(insertIdx, 0, sourceObj);
 
-    targetGroup.add(sourceObj);
-    targetGroup.dirty = true;
-    targetGroup.setCoords();
-    try { (targetGroup as any)._calcBounds(); } catch (_) {}
+      if (container instanceof fabric.Group) {
+        container.dirty = true;
+        container.setCoords();
+      }
+      cv.renderAll();
+      forceUpdate((n) => n + 1);
+      return;
+    }
+  }, []);
 
-    canvas.discardActiveObject();
-    canvas.renderAll();
-    onAnimStateChange({ ...animState });
-    forceUpdate((n) => n + 1);
-  }, [canvas, animState, onAnimStateChange]);
+  // Single mousedown handler for starting layer drags
+  const handleLayerMouseDown = useCallback((e: React.MouseEvent, id: string) => {
+    if (e.button !== 0) return;
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'BUTTON' || tag === 'SELECT') return;
+    layerDragRef.current = { sourceId: id, startY: e.clientY, active: false };
 
-  const removeFromGroup = useCallback((sourceObj: fabric.FabricObject, sourceParent: fabric.Group) => {
-    if (!canvas) return;
-    const srcAbsMatrix = sourceObj.calcTransformMatrix();
+    const handleMove = (ev: MouseEvent) => {
+      const drag = layerDragRef.current;
+      if (!drag) return;
+      if (!drag.active && Math.abs(ev.clientY - drag.startY) > 4) {
+        drag.active = true;
+      }
+      if (!drag.active) return;
+      const target = getDropTarget(ev);
+      setDropIndicator(target);
+    };
 
-    sourceParent.remove(sourceObj);
-    sourceParent.dirty = true;
-    sourceParent.setCoords();
-    try { (sourceParent as any)._calcBounds(); } catch (_) {}
+    const handleUp = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
 
-    sourceObj.left = srcAbsMatrix[4];
-    sourceObj.top = srcAbsMatrix[5];
-    sourceObj.setCoords();
+      const drag = layerDragRef.current;
+      if (drag?.active) {
+        const target = getDropTarget(ev);
+        if (target) {
+          executeLayerDrop(drag.sourceId, target.targetId, target.position);
+        }
+      }
+      layerDragRef.current = null;
+      setDropIndicator(null);
+    };
 
-    canvas.add(sourceObj);
-    canvas.discardActiveObject();
-    canvas.renderAll();
-    onAnimStateChange({ ...animState });
-    forceUpdate((n) => n + 1);
-  }, [canvas, animState, onAnimStateChange]);
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+  }, [getDropTarget, executeLayerDrop]);
 
   // ─── Exit group edit mode ────────────────────────────────────────
   const exitGroupEdit = useCallback(() => {
@@ -750,21 +818,17 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
               const isGroup = row.obj instanceof fabric.Group && !(row.obj instanceof fabric.ActiveSelection);
               const isEditingThisGroup = isGroup && editingGroup === row.obj;
               const isChildOfEditingGroup = row.parentGroup && editingGroup === row.parentGroup;
-              const isDragOver = layerDragOverId === id && layerDrag?.sourceId !== id;
-              const isDragging = layerDrag?.sourceId === id && layerDragActive.current;
+              const isDragInto = dropIndicator?.targetId === id && dropIndicator?.position === 'into' && isGroup;
+              const isDragBefore = dropIndicator?.targetId === id && dropIndicator?.position === 'before';
+              const isDragAfter = dropIndicator?.targetId === id && dropIndicator?.position === 'after';
+              const isDragging = layerDragRef.current?.sourceId === id && layerDragRef.current?.active;
               return (
                 <div
                   key={id}
                   data-timeline-id={id}
-                  onMouseDown={(e) => {
-                    if (e.button !== 0) return;
-                    // Don't start drag from buttons/selects
-                    if ((e.target as HTMLElement).tagName === 'BUTTON' || (e.target as HTMLElement).tagName === 'SELECT') return;
-                    setLayerDrag({ sourceId: id, startY: e.clientY });
-                    layerDragActive.current = false;
-                  }}
+                  onMouseDown={(e) => handleLayerMouseDown(e, id)}
                   onClick={() => {
-                    if (!layerDragActive.current) selectTimelineLayer(row);
+                    if (!layerDragRef.current?.active) selectTimelineLayer(row);
                   }}
                   style={{
                     height: `${ROW_H}px`,
@@ -778,10 +842,8 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                     overflow: 'hidden',
                     whiteSpace: 'nowrap',
                     color: isSelected ? accent : hasKf ? text : dimText,
-                    backgroundColor: isDragOver
-                      ? (isGroup
-                        ? (darkMode ? 'rgba(78,205,196,0.35)' : 'rgba(78,205,196,0.25)')
-                        : (darkMode ? 'rgba(255,200,100,0.2)' : 'rgba(255,200,100,0.15)'))
+                    backgroundColor: isDragInto
+                      ? (darkMode ? 'rgba(78,205,196,0.35)' : 'rgba(78,205,196,0.25)')
                       : isDragging
                         ? (darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)')
                         : isSelected
@@ -791,20 +853,22 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                             : isChildOfEditingGroup
                               ? (darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
                               : 'transparent',
-                    cursor: layerDrag ? 'grabbing' : 'grab',
-                    borderLeft: isDragOver
-                      ? `2px solid ${isGroup ? accent : '#FFD93D'}`
+                    cursor: dropIndicator ? 'grabbing' : 'grab',
+                    borderTop: isDragBefore ? `2px solid ${accent}` : '2px solid transparent',
+                    borderBottom: isDragAfter ? `2px solid ${accent}` : undefined,
+                    borderLeft: isDragInto
+                      ? `2px solid ${accent}`
                       : isSelected ? `2px solid ${accent}` : '2px solid transparent',
                     opacity: isDragging ? 0.5 : 1,
                     userSelect: 'none',
                   }}
-                  title={isDragOver
-                    ? (isGroup ? `Drop into ${getLabel(row.obj)}` : 'Drop here to ungroup')
-                    : row.depth > 0
-                      ? `${getLabel(row.obj)} — drag to move out of group`
-                      : isGroup
-                        ? `${getLabel(row.obj)} — drag shapes here`
-                        : `${getLabel(row.obj)} — drag onto a group`}
+                  title={isDragInto
+                    ? `Drop into ${getLabel(row.obj)}`
+                    : isDragBefore
+                      ? `Insert before ${getLabel(row.obj)}`
+                      : isDragAfter
+                        ? `Insert after ${getLabel(row.obj)}`
+                        : `${getLabel(row.obj)} — drag to reorder`}
                 >
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {isGroup ? (isDragOver ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
