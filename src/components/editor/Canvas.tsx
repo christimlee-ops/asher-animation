@@ -494,26 +494,55 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         const sel = fc.getActiveObject();
         onSelectionChange(sel || null);
       });
+      let exitInteractiveTimer: ReturnType<typeof setTimeout> | null = null;
       fc.on('selection:cleared', () => {
-        // Exit interactive mode on all groups when deselecting
-        fc.getObjects().forEach((obj) => {
-          if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection) && obj.interactive) {
-            obj.interactive = false;
-          }
-        });
+        // Delay exiting interactive mode so touch users can tap children after double-tap
+        if (exitInteractiveTimer) clearTimeout(exitInteractiveTimer);
+        exitInteractiveTimer = setTimeout(() => {
+          fc.getObjects().forEach((obj) => {
+            if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection) && obj.interactive) {
+              obj.interactive = false;
+            }
+          });
+          fc.renderAll();
+        }, 300);
         onSelectionChange(null);
+      });
+      fc.on('selection:created', () => {
+        // Cancel the delayed exit if user selected something
+        if (exitInteractiveTimer) { clearTimeout(exitInteractiveTimer); exitInteractiveTimer = null; }
+      });
+      fc.on('selection:updated', () => {
+        if (exitInteractiveTimer) { clearTimeout(exitInteractiveTimer); exitInteractiveTimer = null; }
       });
 
       // Save history on object modified
       fc.on('object:modified', () => saveHistory());
 
-      // Double-click a group to enter interactive mode (edit children individually)
-      fc.on('mouse:dblclick', (opt) => {
-        const target = opt.target;
+      // Double-click/double-tap a group to enter interactive mode (edit children individually)
+      const enterGroupInteractive = (target: fabric.FabricObject | null | undefined) => {
         if (target && target instanceof fabric.Group && !(target instanceof fabric.ActiveSelection)) {
           target.interactive = true;
           target.subTargetCheck = true;
           fc.renderAll();
+        }
+      };
+      fc.on('mouse:dblclick', (opt) => enterGroupInteractive(opt.target));
+
+      // Double-tap support for touch/tablet devices
+      let lastTapTime = 0;
+      let lastTapTarget: fabric.FabricObject | null = null;
+      fc.on('mouse:down', (opt) => {
+        if (!(opt.e as any)?.touches && opt.e?.type !== 'touchstart') return; // only touch
+        const now = Date.now();
+        const target = opt.target || null;
+        if (now - lastTapTime < 400 && target === lastTapTarget) {
+          enterGroupInteractive(target);
+          lastTapTime = 0;
+          lastTapTarget = null;
+        } else {
+          lastTapTime = now;
+          lastTapTarget = target;
         }
       });
 
