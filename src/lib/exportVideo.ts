@@ -1,4 +1,4 @@
-// ─── Video Export via MediaRecorder (no WASM needed) ─────────────
+// ─── Video Export via MediaRecorder with audio mixing ────────────
 import * as fabric from 'fabric';
 import type { AnimationState } from './animationState';
 import { interpolateAtFrame } from './animationState';
@@ -19,6 +19,7 @@ export async function exportToMp4({
   onProgress,
 }: ExportOptions): Promise<Blob> {
   const { fps, totalFrames, timelines } = animState;
+  const audioTracks = animState.audioTracks || [];
   const log = onProgress || (() => {});
 
   // Create an offscreen canvas for recording
@@ -27,12 +28,53 @@ export async function exportToMp4({
   offscreen.height = height;
   const ctx = offscreen.getContext('2d')!;
 
-  // Set up MediaRecorder on the offscreen canvas stream
-  const stream = offscreen.captureStream(0); // 0 = manual frame control
-  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-    ? 'video/webm;codecs=vp9'
-    : 'video/webm';
-  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 5_000_000 });
+  // Set up combined stream: video from canvas + audio from tracks
+  const videoStream = offscreen.captureStream(0); // manual frame control
+
+  // Mix audio tracks into an AudioContext and capture its output
+  const audioCtx = new AudioContext();
+  const destination = audioCtx.createMediaStreamDestination();
+  const audioSources: { source: AudioBufferSourceNode; startTimeSec: number }[] = [];
+
+  // Decode all audio tracks
+  if (audioTracks.length > 0) {
+    log('Loading audio...');
+    for (const track of audioTracks) {
+      try {
+        const res = await fetch(track.dataUrl);
+        const arrayBuf = await res.arrayBuffer();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
+        const source = audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        // Apply volume
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.value = track.volume;
+        source.connect(gainNode);
+        gainNode.connect(destination);
+        audioSources.push({ source, startTimeSec: track.startFrame / fps });
+      } catch (err) {
+        console.warn(`Failed to decode audio track "${track.name}":`, err);
+      }
+    }
+  }
+
+  // Combine video + audio streams
+  const combinedStream = new MediaStream();
+  for (const vt of videoStream.getVideoTracks()) {
+    combinedStream.addTrack(vt);
+  }
+  if (audioSources.length > 0) {
+    for (const at of destination.stream.getAudioTracks()) {
+      combinedStream.addTrack(at);
+    }
+  }
+
+  const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+    ? 'video/webm;codecs=vp9,opus'
+    : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9'
+      : 'video/webm';
+  const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 5_000_000 });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
@@ -100,6 +142,12 @@ export async function exportToMp4({
   log('Recording frames...');
   recorder.start();
 
+  // Start all audio sources at their scheduled times
+  const recordingStartTime = audioCtx.currentTime;
+  for (const { source, startTimeSec } of audioSources) {
+    source.start(recordingStartTime + startTimeSec);
+  }
+
   const frameDuration = 1000 / fps;
 
   for (let frame = 0; frame < totalFrames; frame++) {
@@ -113,9 +161,9 @@ export async function exportToMp4({
     ctx.drawImage(srcCanvas, 0, 0, width, height);
 
     // Request a frame from the stream at the right timing
-    const track = stream.getVideoTracks()[0];
-    if (track && 'requestFrame' in track) {
-      (track as any).requestFrame();
+    const videoTrack = videoStream.getVideoTracks()[0];
+    if (videoTrack && 'requestFrame' in videoTrack) {
+      (videoTrack as any).requestFrame();
     }
 
     // Wait for frame duration to maintain correct timing
@@ -128,6 +176,12 @@ export async function exportToMp4({
 
   recorder.stop();
   await recorderReady;
+
+  // Stop audio sources
+  for (const { source } of audioSources) {
+    try { source.stop(); } catch (_) { /* already stopped */ }
+  }
+  await audioCtx.close();
 
   // Restore original object states
   const restoreStates = (objs: fabric.FabricObject[]) => {
