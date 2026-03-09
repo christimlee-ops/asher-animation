@@ -577,24 +577,28 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
 
       // REORDER within same container
       if (srcParent === tgtRow.parentGroup) {
-        const container = srcParent || cv;
-        const arr: fabric.FabricObject[] = (container as any)._objects;
-        if (!arr) return;
-        const si = arr.indexOf(srcObj);
-        const ti = arr.indexOf(tgtRow.obj);
+        const container: any = srcParent || cv;
+        const objs = container.getObjects() as fabric.FabricObject[];
+        const si = objs.indexOf(srcObj);
+        const ti = objs.indexOf(tgtRow.obj);
         if (si === -1 || ti === -1 || si === ti) return;
 
-        arr.splice(si, 1);
-        let ins = arr.indexOf(tgtRow.obj);
-        if (ins === -1) return;
+        // Remove then re-insert at correct position
+        container.remove(srcObj);
+        const afterRemove = container.getObjects() as fabric.FabricObject[];
+        let ins = afterRemove.indexOf(tgtRow.obj);
+        if (ins === -1) ins = 0;
         if (target.position === 'after') ins++;
-        arr.splice(ins, 0, srcObj);
+        container.insertAt(ins, srcObj);
 
         if (container instanceof fabric.Group) {
           container.dirty = true;
           container.setCoords();
+          try { (container as any)._calcBounds(); } catch (_) {}
         }
+        cv.discardActiveObject();
         cv.renderAll();
+        onAnimStateChangeRef.current({ ...animStateRef.current });
         forceUpdate((n) => n + 1);
         return;
       }
@@ -893,23 +897,22 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
             ))}
           </div>
 
-          {/* Last keyframe marker */}
-          {lastKeyframeFrame > 0 && (
-            <div style={{
-              position: 'absolute',
-              left: `${lastKeyframeFrame * FRAME_W}px`,
-              top: 0,
-              bottom: 0,
-              width: '1px',
-              backgroundColor: kfColor,
-              opacity: 0.4,
-              zIndex: 5,
-              pointerEvents: 'none',
-            }} />
-          )}
-
           {/* Layer rows with keyframes */}
-          <div style={{ width: `${totalW}px`, position: 'relative' }}>
+          <div style={{ width: `${totalW}px`, position: 'relative', minHeight: `${rows.length * ROW_H}px` }}>
+            {/* Last keyframe marker — inside rows container so it scrolls with content */}
+            {lastKeyframeFrame > 0 && (
+              <div style={{
+                position: 'absolute',
+                left: `${lastKeyframeFrame * FRAME_W}px`,
+                top: 0,
+                height: '100%',
+                width: '1px',
+                backgroundColor: kfColor,
+                opacity: 0.4,
+                zIndex: 5,
+                pointerEvents: 'none',
+              }} />
+            )}
             {rows.map((row) => {
               const id = (row.obj as any)._animId;
               const tl = animState.timelines.find((t) => t.objectId === id);
@@ -968,28 +971,28 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                 </div>
               );
             })}
-          </div>
-
-          {/* Playhead */}
-          <div style={{
-            position: 'absolute',
-            left: `${currentFrame * FRAME_W}px`,
-            top: 0,
-            bottom: 0,
-            width: '2px',
-            backgroundColor: accent,
-            zIndex: 10,
-            pointerEvents: 'none',
-          }}>
+            {/* Playhead — inside rows container so it scrolls with content */}
             <div style={{
               position: 'absolute',
+              left: `${currentFrame * FRAME_W}px`,
               top: 0,
-              left: '-4px',
-              width: '10px',
-              height: '14px',
+              height: '100%',
+              width: '2px',
               backgroundColor: accent,
-              borderRadius: '0 0 3px 3px',
-            }} />
+              zIndex: 10,
+              pointerEvents: 'none',
+            }}>
+              <div style={{
+                position: 'sticky',
+                top: 0,
+                left: '-4px',
+                width: '10px',
+                height: '14px',
+                backgroundColor: accent,
+                borderRadius: '0 0 3px 3px',
+                marginLeft: '-4px',
+              }} />
+            </div>
           </div>
         </div>
       </div>
