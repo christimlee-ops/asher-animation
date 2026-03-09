@@ -73,6 +73,8 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const labelColRef = useRef<HTMLDivElement | null>(null);
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const animStateRef = useRef(animState);
+  animStateRef.current = animState;
 
   // Timeline zoom
   const [frameZoom, setFrameZoom] = useState(5); // pixels per frame
@@ -388,67 +390,43 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     }
   }, [audioTracks]);
 
-  // Play/pause audio with animation — use a ref-based approach so audio stays in sync
+  // Sync audio on every frame change — handles playback, scrubbing, and drag moves
   useEffect(() => {
     const map = audioElementsRef.current;
-    const tracks = animState.audioTracks || [];
+    const tracks = animStateRef.current.audioTracks || [];
 
-    if (isPlaying) {
-      // Start all audio tracks at correct offset
-      for (const track of tracks) {
-        const audio = map.get(track.id);
-        if (!audio) continue;
-        const offsetFrames = currentFrame - track.startFrame;
-        const offsetSec = offsetFrames / fps;
-
-        const startAudio = () => {
-          if (!isPlayingRef.current) return;
-          if (offsetFrames >= 0) {
-            audio.currentTime = offsetSec;
-            audio.play().catch((err) => console.warn('Audio play failed:', err));
-          }
-        };
-
-        // If audio is ready, play immediately; otherwise wait for it to load
-        if (audio.readyState >= 2) {
-          startAudio();
-        } else {
-          audio.addEventListener('canplay', startAudio, { once: true });
-        }
-      }
-    } else {
-      // Pause all
-      for (const [, audio] of map.entries()) {
-        if (!audio.paused) audio.pause();
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying]);
-
-  // Stop audio when animation ends (playback stops at last keyframe)
-  useEffect(() => {
-    if (!isPlaying) {
-      const map = audioElementsRef.current;
-      for (const [, audio] of map.entries()) {
-        if (!audio.paused) audio.pause();
-      }
-    }
-  }, [isPlaying]);
-
-  // Sync audio time on scrub (when not playing)
-  useEffect(() => {
-    if (isPlaying) return;
-    const map = audioElementsRef.current;
-    for (const track of animState.audioTracks || []) {
+    for (const track of tracks) {
       const audio = map.get(track.id);
-      if (!audio || audio.readyState < 2) continue;
-      const offsetSec = (currentFrame - track.startFrame) / fps;
-      if (offsetSec >= 0) {
+      if (!audio) continue;
+      const offsetFrames = currentFrame - track.startFrame;
+      const offsetSec = offsetFrames / fps;
+      const shouldPlay = isPlaying && offsetFrames >= 0 && audio.readyState >= 2;
+
+      if (shouldPlay) {
+        // Keep audio in sync — only seek if drifted more than 0.3s
+        const drift = Math.abs(audio.currentTime - offsetSec);
+        if (audio.paused) {
+          audio.currentTime = offsetSec;
+          audio.play().catch((err) => console.warn('Audio play failed:', err));
+        } else if (drift > 0.3) {
+          audio.currentTime = offsetSec;
+        }
+      } else if (!audio.paused) {
+        audio.pause();
+      }
+
+      // If not playing, sync position for scrubbing
+      if (!isPlaying && audio.readyState >= 2 && offsetFrames >= 0) {
         audio.currentTime = offsetSec;
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFrame]);
+
+    // Pause any audio that no longer has a track
+    const trackIds = new Set(tracks.map((t) => t.id));
+    for (const [id, audio] of map.entries()) {
+      if (!trackIds.has(id) && !audio.paused) audio.pause();
+    }
+  }, [currentFrame, isPlaying, fps]);
 
   // ─── Scrub to frame ────────────────────────────────────────────
   const scrubTo = useCallback((frame: number) => {
@@ -613,8 +591,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   rowsRef.current = rows;
   const canvasRef = useRef(canvas);
   canvasRef.current = canvas;
-  const animStateRef = useRef(animState);
-  animStateRef.current = animState;
   const onAnimStateChangeRef = useRef(onAnimStateChange);
   onAnimStateChangeRef.current = onAnimStateChange;
 
