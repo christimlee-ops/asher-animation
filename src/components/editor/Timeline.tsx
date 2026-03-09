@@ -974,10 +974,22 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                           boxShadow: isDragging ? '0 2px 8px rgba(0,0,0,0.4)' : '0 1px 3px rgba(0,0,0,0.3)',
                           transition: isDragging ? 'none' : 'box-shadow 0.15s',
                         }}
-                        title={isDragging ? `Moving to frame ${displayFrame}` : `Frame ${kf.frame} — drag to move, right-click to delete`}
+                        title={isDragging ? `Moving to frame ${displayFrame}` : `Frame ${kf.frame} — drag to move, long-press or right-click to delete`}
                         onMouseDown={(e) => { if (e.button === 0) handleKfDragStart(e, id, kf.frame); }}
                         onClick={(e) => { e.stopPropagation(); if (!draggingKf) scrubTo(kf.frame); }}
                         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); deleteKeyframe(id, kf.frame); }}
+                        onTouchStart={(e) => {
+                          const timer = setTimeout(() => {
+                            // Long-press: confirm then delete
+                            if (confirm(`Delete keyframe at frame ${kf.frame}?`)) {
+                              deleteKeyframe(id, kf.frame);
+                            }
+                          }, 500);
+                          const cancel = () => clearTimeout(timer);
+                          e.currentTarget.addEventListener('touchend', cancel, { once: true });
+                          e.currentTarget.addEventListener('touchmove', cancel, { once: true });
+                          e.currentTarget.addEventListener('touchcancel', cancel, { once: true });
+                        }}
                       />
                     );
                   })}

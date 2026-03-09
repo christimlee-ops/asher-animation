@@ -674,13 +674,16 @@ export default function PropertiesPanel({
     <div style={styles.panel}>
       <div style={styles.title}>Properties</div>
 
+      {/* Scrollable wrapper for entire panel content (layers + properties) */}
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' as any, touchAction: 'pan-y' }}>
+
       {/* ─── Layers Section (large, scrollable) ─── */}
       <div style={styles.section}>
         <div style={styles.sectionLabel}>
           Layers ({countAll(layers)})
         </div>
       </div>
-      <div style={styles.layersContainer}>
+      <div style={{ padding: '0 8px 8px' }}>
         {layers.length === 0 ? (
           <div style={styles.emptyLayers}>
             <div style={{ fontSize: '36px' }}>🎨</div>
@@ -942,6 +945,7 @@ export default function PropertiesPanel({
         </>
         );
       })()}
+      </div>{/* end scrollable wrapper */}
     </div>
   );
 }
