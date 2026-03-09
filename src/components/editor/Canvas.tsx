@@ -220,20 +220,45 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
             ['left', 'bottom'],
             ['left', 'center'],
           ];
-          // Find current position
+
+          // Convert origin string to fraction (0 = left/top, 0.5 = center, 1 = right/bottom)
+          const toFrac = (o: string) => o === 'left' || o === 'top' ? 0 : o === 'right' || o === 'bottom' ? 1 : 0.5;
+
           const curOx = String(obj.originX);
           const curOy = String(obj.originY);
           let curIdx = origins.findIndex(([ox, oy]) => ox === curOx && oy === curOy);
           if (curIdx === -1) curIdx = 0;
           const nextIdx = (curIdx + 1) % origins.length;
           const [newOx, newOy] = origins[nextIdx];
-          // Preserve visual position
-          const center = obj.getCenterPoint();
+
+          // Calculate position adjustment in parent coordinate space
+          // This works for both top-level objects and group children
+          const w = (obj.width || 0) * (obj.scaleX || 1);
+          const h = (obj.height || 0) * (obj.scaleY || 1);
+          const rad = ((obj.angle || 0) * Math.PI) / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+
+          // Origin offset from top-left corner, rotated
+          const curFX = toFrac(curOx), curFY = toFrac(curOy);
+          const newFX = toFrac(newOx), newFY = toFrac(newOy);
+          const dxLocal = (curFX - newFX) * w;
+          const dyLocal = (curFY - newFY) * h;
+          // Rotate the delta by the object's angle
+          const dxRot = dxLocal * cos - dyLocal * sin;
+          const dyRot = dxLocal * sin + dyLocal * cos;
+
           obj.originX = newOx as any;
           obj.originY = newOy as any;
-          obj.setPositionByOrigin(center, 'center', 'center');
+          obj.left = (obj.left || 0) + dxRot;
+          obj.top = (obj.top || 0) + dyRot;
           obj.setCoords();
           obj.canvas?.renderAll();
+          // Also re-render parent group if inside one
+          if (obj.group) {
+            obj.group.dirty = true;
+            obj.group.setCoords();
+          }
           return true;
         },
         render: function (ctx, left, top) {
