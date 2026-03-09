@@ -35,7 +35,6 @@ export default function EditorPage() {
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [canvasVersion, setCanvasVersion] = useState(0);
   const isTablet = useIsTablet();
-  const [showProps, setShowProps] = useState(false);
   const canvasRef = useRef<CanvasHandle>(null);
 
   const handleHistoryChange = useCallback((undo: boolean, redo: boolean) => {
@@ -264,28 +263,14 @@ export default function EditorPage() {
 
   const pageBg = darkMode ? '#0f3460' : '#E8F0FE';
 
-  // Close properties overlay when switching to desktop
-  useEffect(() => {
-    if (!isTablet) setShowProps(false);
-  }, [isTablet]);
-
-  // Close properties overlay when selection is cleared on tablet
-  useEffect(() => {
-    if (isTablet && !selectedObject) setShowProps(false);
-  }, [isTablet, selectedObject]);
-
-  // Auto-show properties when selecting an object on tablet
-  useEffect(() => {
-    if (isTablet && selectedObject) setShowProps(true);
-  }, [isTablet, selectedObject]);
 
   const styles = {
     layout: {
       display: 'grid',
       gridTemplateRows: isTablet ? 'auto auto 1fr auto' : 'auto 1fr auto',
-      gridTemplateColumns: isTablet ? '1fr' : '220px 1fr 260px',
+      gridTemplateColumns: isTablet ? '1fr 220px' : '220px 1fr 260px',
       gridTemplateAreas: isTablet
-        ? `"topbar" "tools" "canvas" "timeline"`
+        ? `"topbar topbar" "tools tools" "canvas props" "timeline timeline"`
         : `"topbar topbar topbar" "tools canvas props" "timeline timeline timeline"`,
       height: '100vh',
       width: '100vw',
@@ -296,24 +281,7 @@ export default function EditorPage() {
     topbar: { gridArea: 'topbar' } as React.CSSProperties,
     tools: { gridArea: 'tools', overflow: 'hidden' } as React.CSSProperties,
     canvas: { gridArea: 'canvas', overflow: 'hidden', display: 'flex', position: 'relative' as const } as React.CSSProperties,
-    props: isTablet ? {
-      position: 'fixed' as const,
-      right: 0,
-      top: 0,
-      bottom: 0,
-      width: '280px',
-      zIndex: 200,
-      overflow: 'auto',
-      boxShadow: '-4px 0 20px rgba(0,0,0,0.2)',
-      transform: showProps ? 'translateX(0)' : 'translateX(100%)',
-      transition: 'transform 0.25s ease',
-    } as React.CSSProperties : { gridArea: 'props', overflow: 'hidden' } as React.CSSProperties,
-    propsBackdrop: {
-      position: 'fixed' as const,
-      inset: 0,
-      backgroundColor: 'rgba(0,0,0,0.3)',
-      zIndex: 199,
-    } as React.CSSProperties,
+    props: { gridArea: 'props', overflow: 'hidden' } as React.CSSProperties,
     timeline: {
       gridArea: 'timeline',
       height: timelineCollapsed ? '28px' : (isTablet ? '150px' : '200px'),
@@ -377,63 +345,10 @@ export default function EditorPage() {
           onHistoryChange={handleHistoryChange}
           onToolReset={() => setActiveTool('select')}
         />
-        {/* Tablet: properties toggle button */}
-        {isTablet && selectedObject && !showProps && (
-          <button
-            onClick={() => setShowProps(true)}
-            style={{
-              position: 'absolute',
-              right: 8,
-              top: 8,
-              zIndex: 50,
-              padding: '8px 12px',
-              borderRadius: '10px',
-              border: 'none',
-              backgroundColor: '#4ECDC4',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: '13px',
-              cursor: 'pointer',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-            }}
-          >
-            Properties
-          </button>
-        )}
       </div>
 
       {/* Properties Panel */}
-      {isTablet && showProps && (
-        <div style={styles.propsBackdrop} onClick={() => setShowProps(false)} />
-      )}
       <div style={styles.props}>
-        {isTablet && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
-            borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : '#DFE6E9'}`,
-          }}>
-            <span style={{ fontSize: '13px', fontWeight: 800, color: darkMode ? '#F5F6FA' : '#2D3436' }}>Properties</span>
-            <button
-              onClick={() => setShowProps(false)}
-              style={{
-                padding: '4px 10px',
-                borderRadius: '8px',
-                border: 'none',
-                backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#F5F6FA',
-                color: darkMode ? '#F5F6FA' : '#636E72',
-                fontWeight: 700,
-                fontSize: '16px',
-                cursor: 'pointer',
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        )}
         <PropertiesPanel
           selectedObject={selectedObject}
           canvas={canvasRef.current?.getCanvas() ?? null}

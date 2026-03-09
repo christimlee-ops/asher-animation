@@ -696,6 +696,11 @@ export default function PropertiesPanel({
       </div>
 
       {/* ─── Properties for selected object ─── */}
+      {!selectedObject && (
+        <div style={{ padding: '20px 12px', textAlign: 'center', color: darkMode ? '#636E72' : '#B2BEC3', fontSize: '12px', fontWeight: 600 }}>
+          Select an object to edit properties
+        </div>
+      )}
       {selectedObject && (() => {
         const isGroup = selectedObject instanceof fabric.Group && !(selectedObject instanceof fabric.ActiveSelection);
         const isImage = selectedObject.type === 'image';
