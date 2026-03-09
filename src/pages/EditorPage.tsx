@@ -971,16 +971,16 @@ export default function EditorPage() {
                             {/* Thumbnail */}
                             {isAudio ? (
                               <span style={{
-                                width: '36px', height: '36px', borderRadius: '8px',
+                                width: '56px', height: '56px', borderRadius: '8px',
                                 backgroundColor: darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '18px', flexShrink: 0,
+                                fontSize: '22px', flexShrink: 0,
                               }}>♪</span>
                             ) : (
                               <img
                                 src={getAssetFullUrl(asset)}
                                 alt=""
-                                style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
+                                style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
                               />
                             )}
                             {/* Name */}

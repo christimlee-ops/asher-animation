@@ -244,27 +244,12 @@ export default function ToolsPanel({
           <span>{a.label}</span>
         </button>
       ))}
-
-      {/* Media Library button */}
-      <div style={styles.sectionTitle} />
       <button
-        style={{
-          ...styles.actionBtn,
-          background: darkMode
-            ? 'linear-gradient(135deg, rgba(78,205,196,0.2), rgba(78,205,196,0.1))'
-            : 'linear-gradient(135deg, rgba(78,205,196,0.15), rgba(78,205,196,0.05))',
-          border: `1px solid ${darkMode ? 'rgba(78,205,196,0.3)' : 'rgba(78,205,196,0.4)'}`,
-          fontWeight: 700,
-        }}
+        style={styles.actionBtn}
         onClick={onOpenLibrary}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
-            ? 'rgba(78,205,196,0.25)' : 'rgba(78,205,196,0.2)';
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-        }}
         title="Open Media Library"
+        onMouseEnter={hoverAction}
+        onMouseLeave={unhoverAction}
       >
         <span style={styles.toolIcon}>
           <Icon><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></Icon>
