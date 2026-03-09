@@ -330,11 +330,10 @@ export default function EditorPage() {
     <div style={styles.layout}>
       {/* Top Bar */}
       <div style={{ ...styles.topbar, position: 'relative' }}>
-        {(saveStatus || saving || exportStatus) && (
+        {(saveStatus || saving) && (
           <div style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', zIndex: 10, display: 'flex', gap: '12px' }}>
             {saving && <span style={{ fontSize: '13px', fontWeight: 700, color: darkMode ? '#4ECDC4' : '#636E72' }}>Saving...</span>}
             {saveStatus && <span style={{ fontSize: '13px', fontWeight: 700, color: saveStatus === 'Saved!' ? '#00B894' : '#FF6B6B' }}>{saveStatus}</span>}
-            {exportStatus && <span style={{ fontSize: '13px', fontWeight: 700, color: '#6C5CE7' }}>{exportStatus}</span>}
           </div>
         )}
         <TopBar
@@ -759,6 +758,39 @@ export default function EditorPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Export progress popup */}
+      {exporting && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
+            borderRadius: '16px',
+            padding: '32px 40px',
+            minWidth: '320px',
+            textAlign: 'center',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.3)',
+            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+          }}>
+            <div style={{
+              width: '48px', height: '48px', margin: '0 auto 16px',
+              border: '4px solid', borderColor: `#4ECDC4 transparent transparent transparent`,
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <div style={{ fontSize: '16px', fontWeight: 800, color: darkMode ? '#F5F6FA' : '#2D3436', marginBottom: '8px' }}>
+              Exporting Video
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: darkMode ? '#636E72' : '#636E72' }}>
+              {exportStatus || 'Starting...'}
+            </div>
+          </div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
     </div>

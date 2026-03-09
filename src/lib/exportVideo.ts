@@ -1,5 +1,6 @@
 // ─── MP4 Export via FFmpeg.wasm ──────────────────────────────────
 import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { toBlobURL } from '@ffmpeg/util';
 import * as fabric from 'fabric';
 import type { AnimationState } from './animationState';
 import { interpolateAtFrame } from './animationState';
@@ -16,10 +17,10 @@ async function getFFmpeg(onLog?: (msg: string) => void): Promise<FFmpeg> {
     onLog?.(`Encoding: ${Math.round(progress * 100)}%`);
   });
   const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
-  await ffmpeg.load({
-    coreURL: `${baseURL}/ffmpeg-core.js`,
-    wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-  });
+  // Use toBlobURL to avoid CORS issues with SharedArrayBuffer
+  const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+  const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+  await ffmpeg.load({ coreURL, wasmURL });
   return ffmpeg;
 }
 
@@ -43,13 +44,34 @@ export async function exportToMp4({
 
   log('Capturing frames...');
 
-  // Save current canvas state
+  // Create an offscreen canvas to render frames without affecting the visible canvas
+  const offscreen = document.createElement('canvas');
+  offscreen.width = width;
+  offscreen.height = height;
+  const ctx = offscreen.getContext('2d')!;
+
+  // Save original object states so we can restore them
+  const originalStates: Map<string, Record<string, any>> = new Map();
+  const saveOriginalStates = (objs: fabric.FabricObject[]) => {
+    for (const obj of objs) {
+      const id = (obj as any)._animId;
+      if (id) {
+        originalStates.set(id, {
+          left: obj.left, top: obj.top, scaleX: obj.scaleX, scaleY: obj.scaleY,
+          angle: obj.angle, opacity: obj.opacity, originX: obj.originX, originY: obj.originY,
+        });
+      }
+      if (obj instanceof fabric.Group) {
+        saveOriginalStates((obj as fabric.Group).getObjects());
+      }
+    }
+  };
+  saveOriginalStates(canvas.getObjects());
+
+  // Save viewport
   const originalViewport = canvas.viewportTransform ? [...canvas.viewportTransform] : null;
-
-  // Reset viewport for clean capture
-  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-
-  const frames: Uint8Array[] = [];
+  const originalWidth = canvas.getWidth();
+  const originalHeight = canvas.getHeight();
 
   const applyAnimToObjects = (objs: fabric.FabricObject[], f: number) => {
     for (const obj of objs) {
@@ -81,23 +103,27 @@ export async function exportToMp4({
     }
   };
 
+  const frames: Uint8Array[] = [];
+
+  // Temporarily set viewport for clean capture, but we'll restore between captures
+  canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+  canvas.setDimensions({ width, height });
+
   for (let frame = 0; frame < totalFrames; frame++) {
     applyAnimToObjects(canvas.getObjects(), frame);
     canvas.discardActiveObject();
     canvas.renderAll();
 
-    // Capture frame as PNG
-    const dataUrl = canvas.toDataURL({
-      format: 'png',
-      multiplier: 1,
-      left: 0,
-      top: 0,
-      width,
-      height,
-    });
+    // Draw the fabric canvas onto our offscreen canvas
+    const srcCanvas = canvas.getElement();
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(srcCanvas, 0, 0, width, height);
 
-    const res = await fetch(dataUrl);
-    const buf = new Uint8Array(await res.arrayBuffer());
+    // Convert to PNG blob
+    const blob = await new Promise<Blob>((resolve) => {
+      offscreen.toBlob((b) => resolve(b!), 'image/png');
+    });
+    const buf = new Uint8Array(await blob.arrayBuffer());
     frames.push(buf);
 
     if (frame % fps === 0) {
@@ -105,10 +131,32 @@ export async function exportToMp4({
     }
   }
 
-  // Restore viewport
+  // Restore original object states
+  const restoreStates = (objs: fabric.FabricObject[]) => {
+    for (const obj of objs) {
+      const id = (obj as any)._animId;
+      if (id && originalStates.has(id)) {
+        obj.set(originalStates.get(id)!);
+        obj.dirty = true;
+        obj.setCoords();
+      }
+      if (obj instanceof fabric.Group) {
+        restoreStates((obj as fabric.Group).getObjects());
+        obj.dirty = true;
+        obj.setCoords();
+        if (typeof (obj as any)._calcBounds === 'function') {
+          (obj as any)._calcBounds();
+        }
+      }
+    }
+  };
+  restoreStates(canvas.getObjects());
+
+  // Restore viewport and dimensions
   if (originalViewport) {
     canvas.setViewportTransform(originalViewport as fabric.TMat2D);
   }
+  canvas.setDimensions({ width: originalWidth, height: originalHeight });
   canvas.renderAll();
 
   log('Loading encoder...');
