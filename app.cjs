@@ -119,17 +119,23 @@ app.use((req, res, next) => {
 // Debug: test login flow
 app.get('/api/debug-login', async (req, res) => {
   try {
+    const [allUsers] = await dbRef.execute('SELECT id, username, email FROM users');
     const [rows] = await dbRef.execute(
       'SELECT id, username, email, password_hash FROM users WHERE LOWER(username) = ?',
       ['asher']
     );
     res.json({
-      userFound: rows.length > 0,
+      dbType: process.env.DB_TYPE,
+      dbHost: process.env.DB_HOST,
+      dbName: process.env.DB_NAME,
+      totalUsers: allUsers.length,
+      allUsers: allUsers,
+      searchResult: rows.length,
       user: rows[0] ? { id: rows[0].id, username: rows[0].username, email: rows[0].email, hashLength: rows[0].password_hash?.length } : null,
       jwtSecretSet: !!process.env.JWT_SECRET,
     });
   } catch (err) {
-    res.json({ error: err.message, stack: err.stack });
+    res.json({ error: err.message, code: err.code });
   }
 });
 
