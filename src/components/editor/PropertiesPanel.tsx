@@ -318,10 +318,8 @@ export default function PropertiesPanel({
       const isTargetGroup = target instanceof fabric.Group && !(target instanceof fabric.ActiveSelection);
       if (isTargetGroup && target !== dragParent) {
         const tgtGroup = target as fabric.Group;
-        // Save absolute position before removing
-        const mat = dragItem.calcTransformMatrix();
-        const absCenter = new fabric.Point(mat[4], mat[5]);
 
+        // Remove from current container (exitGroup converts to absolute coords)
         if (dragParent) {
           dragParent.remove(dragItem);
           dragParent.dirty = true;
@@ -331,14 +329,8 @@ export default function PropertiesPanel({
           canvas.remove(dragItem);
         }
 
-        // Convert to target group's local space
-        const gMat = tgtGroup.calcTransformMatrix();
-        const inv = fabric.util.invertTransform(gMat);
-        const local = fabric.util.transformPoint(absCenter, inv);
-        dragItem.left = local.x;
-        dragItem.top = local.y;
-        dragItem.setCoords();
-
+        // add() calls enterGroup which automatically converts absolute coords
+        // to the group's local space — no manual conversion needed
         tgtGroup.add(dragItem);
         tgtGroup.dirty = true;
         tgtGroup.setCoords();

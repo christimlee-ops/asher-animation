@@ -526,8 +526,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
       // DROP INTO GROUP
       if (target.position === 'into' && tgtIsGroup && tgtRow.obj !== srcParent) {
         const tgtGroup = tgtRow.obj as fabric.Group;
-        const mat = srcObj.calcTransformMatrix();
-        const center = new fabric.Point(mat[4], mat[5]);
 
         if (srcParent) {
           srcParent.remove(srcObj);
@@ -538,12 +536,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
           cv.remove(srcObj);
         }
 
-        const gMat = tgtGroup.calcTransformMatrix();
-        const inv = fabric.util.invertTransform(gMat);
-        const local = fabric.util.transformPoint(center, inv);
-        srcObj.left = local.x;
-        srcObj.top = local.y;
-        srcObj.setCoords();
+        // add() calls enterGroup which converts absolute coords to local
         tgtGroup.add(srcObj);
         tgtGroup.dirty = true;
         tgtGroup.setCoords();
@@ -847,6 +840,25 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                 >
                   <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {isGroup ? (isDragInto ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
+                  </span>
+                  <span
+                    title={row.obj.visible === false ? 'Show' : 'Hide'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      row.obj.visible = row.obj.visible === false ? true : false;
+                      row.obj.dirty = true;
+                      canvas.renderAll();
+                      forceUpdate();
+                    }}
+                    style={{
+                      cursor: 'pointer',
+                      opacity: row.obj.visible === false ? 0.4 : 0.7,
+                      fontSize: '13px',
+                      padding: '0 3px',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {row.obj.visible === false ? '👁‍🗨' : '👁'}
                   </span>
                 </div>
               );
