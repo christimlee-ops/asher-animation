@@ -14,3 +14,14 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Prevent pull-to-refresh and overscroll on the editor page */
+html, body {
+  overscroll-behavior: none;
+}
+
+/* Canvas touch handling — prevent browser gestures on the canvas */
+canvas.upper-canvas,
+canvas.lower-canvas {
+  touch-action: none;
+}

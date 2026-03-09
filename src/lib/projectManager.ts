@@ -1,21 +1,30 @@
 import { apiGet, apiPost, apiPut, apiDelete } from './api';
-import type { Project } from '../types/animation';
+
+// Server project shape (matches DB columns)
+export interface ServerProject {
+  id: string;
+  name: string;
+  data: any;
+  thumbnail?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
 
 // ─── Save ─────────────────────────────────────────────────────────
 
-export async function saveProject(project: Project): Promise<Project> {
+export async function saveProject(project: { id?: string; name: string; data: any }): Promise<ServerProject> {
   if (project.id) {
-    const res = await apiPut<{ project: Project }>(`/projects/${project.id}`, project);
-    return res.project ?? project;
+    const res = await apiPut<{ project: ServerProject }>(`/projects/${project.id}`, project);
+    return res.project ?? (project as ServerProject);
   }
-  const res = await apiPost<{ project: Project }>('/projects', project);
+  const res = await apiPost<{ project: ServerProject }>('/projects', project);
   return res.project;
 }
 
 // ─── Load ─────────────────────────────────────────────────────────
 
-export async function loadProject(id: string): Promise<Project> {
-  const res = await apiGet<{ project: Project }>(`/projects/${id}`);
+export async function loadProject(id: string): Promise<ServerProject> {
+  const res = await apiGet<{ project: ServerProject }>(`/projects/${id}`);
   return res.project;
 }
 
@@ -49,7 +58,7 @@ const AUTO_SAVE_INTERVAL_MS = 3 * 60 * 1000; // 3 minutes
  * Call stopAutoSave() to clear the timer.
  */
 export function startAutoSave(
-  getProject: () => Project,
+  getProject: () => { id?: string; name: string; data: any },
   onSaved?: () => void,
   onError?: (err: Error) => void
 ): void {
@@ -58,7 +67,7 @@ export function startAutoSave(
   _autoSaveTimer = setInterval(async () => {
     try {
       const project = getProject();
-      await saveProject({ ...project, updatedAt: new Date().toISOString() });
+      await saveProject(project);
       onSaved?.();
     } catch (err) {
       onError?.(err instanceof Error ? err : new Error(String(err)));
