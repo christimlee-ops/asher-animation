@@ -495,11 +495,27 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         onSelectionChange(sel || null);
       });
       fc.on('selection:cleared', () => {
+        // Exit interactive mode on all groups when deselecting
+        fc.getObjects().forEach((obj) => {
+          if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection) && obj.interactive) {
+            obj.interactive = false;
+          }
+        });
         onSelectionChange(null);
       });
 
       // Save history on object modified
       fc.on('object:modified', () => saveHistory());
+
+      // Double-click a group to enter interactive mode (edit children individually)
+      fc.on('mouse:dblclick', (opt) => {
+        const target = opt.target;
+        if (target && target instanceof fabric.Group && !(target instanceof fabric.ActiveSelection)) {
+          target.interactive = true;
+          target.subTargetCheck = true;
+          fc.renderAll();
+        }
+      });
 
       // File drop
       const handleDrop = (e: DragEvent) => {
