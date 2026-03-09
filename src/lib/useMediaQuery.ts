@@ -21,3 +21,8 @@ export function useMediaQuery(query: string): boolean {
 export function useIsTablet(): boolean {
   return useMediaQuery('(max-width: 1024px)');
 }
+
+/** True when viewport is 600px or narrower (mobile breakpoint) */
+export function useIsMobile(): boolean {
+  return useMediaQuery('(max-width: 600px)');
+}

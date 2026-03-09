@@ -25,6 +25,8 @@ export interface CanvasHandle {
   setBackgroundColor: (color: string) => void;
   toggleGrid: () => void;
   importFile: (file: File) => void;
+  flipHorizontalSelected: () => void;
+  flipVerticalSelected: () => void;
 }
 
 interface CanvasProps {
@@ -970,6 +972,30 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
             saveHistory();
             onSelectionChange(fc.getActiveObject() || null);
           });
+        },
+        flipHorizontalSelected: () => {
+          const fc = fcRef.current;
+          if (!fc) return;
+          const active = fc.getActiveObjects();
+          if (!active.length) return;
+          active.forEach((obj) => {
+            obj.set({ flipX: !obj.flipX });
+            obj.setCoords();
+          });
+          fc.renderAll();
+          saveHistory();
+        },
+        flipVerticalSelected: () => {
+          const fc = fcRef.current;
+          if (!fc) return;
+          const active = fc.getActiveObjects();
+          if (!active.length) return;
+          active.forEach((obj) => {
+            obj.set({ flipY: !obj.flipY });
+            obj.setCoords();
+          });
+          fc.renderAll();
+          saveHistory();
         },
         setBackgroundColor: (color: string) => {
           const fc = fcRef.current;

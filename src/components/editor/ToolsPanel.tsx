@@ -17,7 +17,9 @@ export type ActionName =
   | 'group'
   | 'ungroup'
   | 'duplicate'
-  | 'import';
+  | 'import'
+  | 'flipH'
+  | 'flipV';
 
 interface ToolsPanelProps {
   activeTool: ToolName;
@@ -50,6 +52,8 @@ const ACTION_ICONS: Record<string, React.ReactNode> = {
   group: <Icon><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/><path d="M10 6h4m-4 12h4M6 10v4m12-4v4" strokeDasharray="2 2"/></Icon>,
   ungroup: <Icon><rect x="2" y="2" width="8" height="8" rx="1"/><rect x="14" y="14" width="8" height="8" rx="1"/><path d="M14 10l-4 4" strokeDasharray="2 2"/></Icon>,
   duplicate: <Icon><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></Icon>,
+  flipH: <Icon><path d="M12 2v20"/><polyline points="16 6 20 12 16 18"/><polyline points="8 6 4 12 8 18"/></Icon>,
+  flipV: <Icon><path d="M2 12h20"/><polyline points="6 8 12 4 18 8"/><polyline points="6 16 12 20 18 16"/></Icon>,
 };
 
 const TOOLS: { name: ToolName; label: string }[] = [
@@ -69,6 +73,8 @@ const ACTIONS: { name: ActionName; label: string }[] = [
   { name: 'group', label: 'Group' },
   { name: 'ungroup', label: 'Ungroup' },
   { name: 'duplicate', label: 'Duplicate' },
+  { name: 'flipH', label: 'Flip Horizontal' },
+  { name: 'flipV', label: 'Flip Vertical' },
 ];
 
 export default function ToolsPanel({

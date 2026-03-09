@@ -15,7 +15,7 @@ import { loadProject, listProjects, deleteProject } from '../lib/projectManager'
 import { apiPost, apiPut } from '../lib/api';
 import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES } from '../lib/mediaLibrary';
 import type { MediaAsset, AssetCategory } from '../lib/mediaLibrary';
-import { useIsTablet } from '../lib/useMediaQuery';
+import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function EditorPage() {
@@ -47,7 +47,9 @@ export default function EditorPage() {
   const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const [renamingAssetId, setRenamingAssetId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [librarySearch, setLibrarySearch] = useState('');
   const isTablet = useIsTablet();
+  const isMobile = useIsMobile();
   const canvasRef = useRef<CanvasHandle>(null);
 
   // Ownership: true if new project or if current user is the owner
@@ -231,6 +233,12 @@ export default function EditorPage() {
         case 'import':
           handleImport();
           break;
+        case 'flipH':
+          handle.flipHorizontalSelected();
+          break;
+        case 'flipV':
+          handle.flipVerticalSelected();
+          break;
       }
     },
     [handleImport],
@@ -396,11 +404,17 @@ export default function EditorPage() {
   const styles = {
     layout: {
       display: 'grid',
-      gridTemplateRows: isTablet ? 'auto auto 1fr auto' : 'auto 1fr auto',
-      gridTemplateColumns: isTablet ? '1fr 220px' : '220px 1fr 260px',
-      gridTemplateAreas: isTablet
-        ? `"topbar topbar" "tools tools" "canvas props" "timeline timeline"`
-        : `"topbar topbar topbar" "tools canvas props" "timeline timeline timeline"`,
+      gridTemplateRows: isMobile
+        ? 'auto auto 1fr auto'
+        : isTablet ? 'auto auto 1fr auto' : 'auto 1fr auto',
+      gridTemplateColumns: isMobile
+        ? '1fr'
+        : isTablet ? '1fr 220px' : '220px 1fr 260px',
+      gridTemplateAreas: isMobile
+        ? `"topbar" "tools" "canvas" "timeline"`
+        : isTablet
+          ? `"topbar topbar" "tools tools" "canvas props" "timeline timeline"`
+          : `"topbar topbar topbar" "tools canvas props" "timeline timeline timeline"`,
       height: '100vh',
       width: '100vw',
       overflow: 'hidden',
@@ -410,10 +424,10 @@ export default function EditorPage() {
     topbar: { gridArea: 'topbar' } as React.CSSProperties,
     tools: { gridArea: 'tools', overflow: 'hidden' } as React.CSSProperties,
     canvas: { gridArea: 'canvas', overflow: 'hidden', display: 'flex', position: 'relative' as const } as React.CSSProperties,
-    props: { gridArea: 'props', overflow: 'hidden' } as React.CSSProperties,
+    props: { gridArea: 'props', overflow: isMobile ? 'visible' : 'hidden', ...(isMobile ? { display: 'none' } : {}) } as React.CSSProperties,
     timeline: {
       gridArea: 'timeline',
-      height: timelineCollapsed ? '28px' : (isTablet ? '150px' : '200px'),
+      height: timelineCollapsed ? '28px' : (isMobile ? '120px' : isTablet ? '150px' : '200px'),
       borderTop: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid #DFE6E9',
       boxShadow: '0 -2px 12px rgba(0,0,0,0.06)',
       overflow: 'hidden',
@@ -815,20 +829,20 @@ export default function EditorPage() {
             inset: 0,
             backgroundColor: 'rgba(0,0,0,0.5)',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: isMobile ? 'flex-end' : 'center',
             justifyContent: 'center',
             zIndex: 9999,
           }}
-          onClick={() => { setShowLibrary(false); setEditingAssetId(null); }}
+          onClick={() => { setShowLibrary(false); setEditingAssetId(null); setLibrarySearch(''); }}
         >
           <div
             style={{
               backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
-              borderRadius: '16px',
-              padding: '24px',
-              width: '520px',
-              maxWidth: '90vw',
-              maxHeight: '80vh',
+              borderRadius: isMobile ? '16px 16px 0 0' : '16px',
+              padding: isMobile ? '16px' : '24px',
+              width: isMobile ? '100%' : '520px',
+              maxWidth: isMobile ? '100%' : '90vw',
+              maxHeight: isMobile ? '90vh' : '80vh',
               display: 'flex',
               flexDirection: 'column',
               boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
@@ -837,34 +851,35 @@ export default function EditorPage() {
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>Media Library</h2>
-              <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '10px' : '16px', gap: '8px' }}>
+              <h2 style={{ margin: 0, fontSize: isMobile ? '17px' : '20px', fontWeight: 800, whiteSpace: 'nowrap' }}>Media Library</h2>
+              <div style={{ display: 'flex', gap: '6px' }}>
                 <button
                   onClick={handleImportToLibrary}
                   style={{
-                    padding: '8px 16px',
+                    padding: isMobile ? '7px 10px' : '8px 16px',
                     borderRadius: '10px',
                     border: 'none',
                     background: 'linear-gradient(135deg, #4ECDC4, #44B09E)',
                     color: '#fff',
                     fontWeight: 700,
-                    fontSize: '13px',
+                    fontSize: isMobile ? '12px' : '13px',
                     cursor: 'pointer',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  + Import New
+                  + Import
                 </button>
                 <button
-                  onClick={() => { setShowLibrary(false); setEditingAssetId(null); }}
+                  onClick={() => { setShowLibrary(false); setEditingAssetId(null); setLibrarySearch(''); }}
                   style={{
-                    padding: '8px 12px',
+                    padding: isMobile ? '7px 10px' : '8px 12px',
                     borderRadius: '10px',
                     border: 'none',
                     backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#DFE6E9',
                     color: darkMode ? '#F5F6FA' : '#636E72',
                     fontWeight: 700,
-                    fontSize: '13px',
+                    fontSize: isMobile ? '12px' : '13px',
                     cursor: 'pointer',
                   }}
                 >
@@ -873,46 +888,96 @@ export default function EditorPage() {
               </div>
             </div>
 
-            {/* Category tabs */}
-            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
-              {ASSET_CATEGORIES.map((cat) => {
-                const count = libraryAssets.filter((a) => a.category === cat.key).length;
-                const isActive = libraryCategory === cat.key;
-                return (
-                  <button
-                    key={cat.key}
-                    onClick={() => { setLibraryCategory(cat.key); setEditingAssetId(null); }}
-                    style={{
-                      flex: 1,
-                      padding: '10px 8px',
-                      borderRadius: '10px',
-                      border: `2px solid ${isActive ? '#4ECDC4' : 'transparent'}`,
-                      backgroundColor: isActive
-                        ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)')
-                        : (darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'),
-                      color: isActive ? '#4ECDC4' : (darkMode ? '#B2BEC3' : '#636E72'),
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '2px',
-                      transition: 'all 0.15s',
-                    }}
-                  >
-                    <span style={{ fontSize: '18px' }}>{cat.icon}</span>
-                    <span>{cat.label}</span>
-                    <span style={{ fontSize: '10px', opacity: 0.7 }}>{count}</span>
-                  </button>
-                );
-              })}
+            {/* Search bar */}
+            <div style={{ position: 'relative', marginBottom: '10px' }}>
+              <svg
+                width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={darkMode ? '#636E72' : '#B2BEC3'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"
+                style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+              >
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search all categories..."
+                value={librarySearch}
+                onChange={(e) => setLibrarySearch(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '9px 10px 9px 32px',
+                  borderRadius: '10px',
+                  border: `2px solid ${librarySearch ? '#4ECDC4' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)')}`,
+                  backgroundColor: darkMode ? 'rgba(255,255,255,0.06)' : '#fff',
+                  color: darkMode ? '#F5F6FA' : '#2D3436',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  transition: 'border-color 0.15s',
+                }}
+              />
+              {librarySearch && (
+                <button
+                  onClick={() => setLibrarySearch('')}
+                  style={{
+                    position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
+                    color: darkMode ? '#636E72' : '#B2BEC3', fontSize: '16px', lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
 
+            {/* Category tabs - hidden when searching */}
+            {!librarySearch && (
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '10px' }}>
+                {ASSET_CATEGORIES.map((cat) => {
+                  const count = libraryAssets.filter((a) => a.category === cat.key).length;
+                  const isActive = libraryCategory === cat.key;
+                  return (
+                    <button
+                      key={cat.key}
+                      onClick={() => { setLibraryCategory(cat.key); setEditingAssetId(null); }}
+                      style={{
+                        flex: 1,
+                        padding: isMobile ? '6px 4px' : '10px 8px',
+                        borderRadius: '10px',
+                        border: `2px solid ${isActive ? '#4ECDC4' : 'transparent'}`,
+                        backgroundColor: isActive
+                          ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)')
+                          : (darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'),
+                        color: isActive ? '#4ECDC4' : (darkMode ? '#B2BEC3' : '#636E72'),
+                        fontSize: isMobile ? '11px' : '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span style={{ fontSize: isMobile ? '15px' : '18px' }}>{cat.icon}</span>
+                      <span>{cat.label}</span>
+                      <span style={{ fontSize: '10px', opacity: 0.7 }}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Asset grid */}
-            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
               {(() => {
-                const filtered = libraryAssets.filter((a) => a.category === libraryCategory);
+                const searchTerm = librarySearch.trim().toLowerCase();
+                const filtered = searchTerm
+                  ? libraryAssets.filter((a) =>
+                      a.original_name.toLowerCase().includes(searchTerm) ||
+                      a.category.toLowerCase().includes(searchTerm) ||
+                      a.mime_type.toLowerCase().includes(searchTerm)
+                    )
+                  : libraryAssets.filter((a) => a.category === libraryCategory);
                 if (filtered.length === 0) {
                   return (
                     <div style={{
@@ -921,25 +986,33 @@ export default function EditorPage() {
                       color: darkMode ? '#636E72' : '#B2BEC3',
                       fontSize: '14px',
                     }}>
-                      No {ASSET_CATEGORIES.find((c) => c.key === libraryCategory)?.label.toLowerCase()} yet.
-                      <br />
-                      <span style={{ fontSize: '12px' }}>Click "Import New" to add files.</span>
+                      {searchTerm
+                        ? <>No results for "{librarySearch}".<br /><span style={{ fontSize: '12px' }}>Try a different search term.</span></>
+                        : <>No {ASSET_CATEGORIES.find((c) => c.key === libraryCategory)?.label.toLowerCase()} yet.<br /><span style={{ fontSize: '12px' }}>Click "+ Import" to add files.</span></>
+                      }
                     </div>
                   );
                 }
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {searchTerm && (
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: darkMode ? '#636E72' : '#B2BEC3', padding: '2px 4px 6px', borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`, marginBottom: '4px' }}>
+                        {filtered.length} result{filtered.length !== 1 ? 's' : ''} across all categories
+                      </div>
+                    )}
                     {filtered.map((asset) => {
                       const isAudio = asset.mime_type.startsWith('audio/');
                       const isEditing = editingAssetId === asset.id;
+                      const thumbSize = isMobile ? 44 : 56;
+                      const matchedCat = searchTerm ? ASSET_CATEGORIES.find((c) => c.key === asset.category) : null;
                       return (
                         <div key={asset.id}>
                           <div
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '10px',
-                              padding: '8px 12px',
+                              gap: isMobile ? '8px' : '10px',
+                              padding: isMobile ? '6px 8px' : '8px 12px',
                               borderRadius: '10px',
                               backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
                               cursor: 'pointer',
@@ -949,6 +1022,7 @@ export default function EditorPage() {
                               handleUseAsset(asset);
                               setShowLibrary(false);
                               setEditingAssetId(null);
+                              setLibrarySearch('');
                             }}
                             onMouseEnter={(e) => {
                               (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
@@ -962,16 +1036,16 @@ export default function EditorPage() {
                             {/* Thumbnail */}
                             {isAudio ? (
                               <span style={{
-                                width: '56px', height: '56px', borderRadius: '8px',
+                                width: `${thumbSize}px`, height: `${thumbSize}px`, borderRadius: '8px',
                                 backgroundColor: darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: '22px', flexShrink: 0,
+                                fontSize: isMobile ? '18px' : '22px', flexShrink: 0,
                               }}>♪</span>
                             ) : (
                               <img
                                 src={getAssetFullUrl(asset)}
                                 alt=""
-                                style={{ width: '56px', height: '56px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
+                                style={{ width: `${thumbSize}px`, height: `${thumbSize}px`, objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
                               />
                             )}
                             {/* Name */}
@@ -1017,8 +1091,13 @@ export default function EditorPage() {
                                   {asset.original_name.replace(/\.[^.]+$/, '')}
                                 </div>
                               )}
-                              <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3' }}>
-                                {(asset.size / 1024).toFixed(0)} KB
+                              <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <span>{(asset.size / 1024).toFixed(0)} KB</span>
+                                {matchedCat && (
+                                  <span style={{ fontSize: '10px', padding: '1px 5px', borderRadius: '4px', backgroundColor: darkMode ? 'rgba(78,205,196,0.12)' : 'rgba(78,205,196,0.08)', color: '#4ECDC4', fontWeight: 700 }}>
+                                    {matchedCat.icon} {matchedCat.label}
+                                  </span>
+                                )}
                               </div>
                             </div>
                             {/* Rename button */}
