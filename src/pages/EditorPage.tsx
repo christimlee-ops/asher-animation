@@ -42,6 +42,9 @@ export default function EditorPage() {
   const [libraryAssets, setLibraryAssets] = useState<MediaAsset[]>([]);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libraryCategory, setLibraryCategory] = useState<AssetCategory>('characters');
+  const [editingAssetId, setEditingAssetId] = useState<number | null>(null);
   const isTablet = useIsTablet();
   const canvasRef = useRef<CanvasHandle>(null);
 
@@ -466,11 +469,7 @@ export default function EditorPage() {
           onAction={handleAction}
           darkMode={darkMode}
           compact={isTablet}
-          libraryAssets={libraryAssets}
-          onUseAsset={handleUseAsset}
-          onDeleteAsset={handleDeleteAsset}
-          onImportToLibrary={handleImportToLibrary}
-          onChangeAssetCategory={handleChangeAssetCategory}
+          onOpenLibrary={() => setShowLibrary(true)}
         />
       </div>
 
@@ -812,6 +811,274 @@ export default function EditorPage() {
               >
                 {saveModalMode === 'saveAs' ? 'Save As New' : 'Save'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Media Library Modal */}
+      {showLibrary && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+          onClick={() => { setShowLibrary(false); setEditingAssetId(null); }}
+        >
+          <div
+            style={{
+              backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
+              borderRadius: '16px',
+              padding: '24px',
+              width: '520px',
+              maxWidth: '90vw',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              color: darkMode ? '#F5F6FA' : '#2D3436',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>Media Library</h2>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={handleImportToLibrary}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #4ECDC4, #44B09E)',
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  + Import New
+                </button>
+                <button
+                  onClick={() => { setShowLibrary(false); setEditingAssetId(null); }}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#DFE6E9',
+                    color: darkMode ? '#F5F6FA' : '#636E72',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Category tabs */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '12px' }}>
+              {ASSET_CATEGORIES.map((cat) => {
+                const count = libraryAssets.filter((a) => a.category === cat.key).length;
+                const isActive = libraryCategory === cat.key;
+                return (
+                  <button
+                    key={cat.key}
+                    onClick={() => { setLibraryCategory(cat.key); setEditingAssetId(null); }}
+                    style={{
+                      flex: 1,
+                      padding: '10px 8px',
+                      borderRadius: '10px',
+                      border: `2px solid ${isActive ? '#4ECDC4' : 'transparent'}`,
+                      backgroundColor: isActive
+                        ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)')
+                        : (darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)'),
+                      color: isActive ? '#4ECDC4' : (darkMode ? '#B2BEC3' : '#636E72'),
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '2px',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <span style={{ fontSize: '18px' }}>{cat.icon}</span>
+                    <span>{cat.label}</span>
+                    <span style={{ fontSize: '10px', opacity: 0.7 }}>{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Asset grid */}
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {(() => {
+                const filtered = libraryAssets.filter((a) => a.category === libraryCategory);
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '40px 20px',
+                      color: darkMode ? '#636E72' : '#B2BEC3',
+                      fontSize: '14px',
+                    }}>
+                      No {ASSET_CATEGORIES.find((c) => c.key === libraryCategory)?.label.toLowerCase()} yet.
+                      <br />
+                      <span style={{ fontSize: '12px' }}>Click "Import New" to add files.</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {filtered.map((asset) => {
+                      const isAudio = asset.mime_type.startsWith('audio/');
+                      const isEditing = editingAssetId === asset.id;
+                      return (
+                        <div key={asset.id}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              padding: '8px 12px',
+                              borderRadius: '10px',
+                              backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                              cursor: 'pointer',
+                              transition: 'background-color 0.15s',
+                            }}
+                            onClick={() => {
+                              handleUseAsset(asset);
+                              setShowLibrary(false);
+                              setEditingAssetId(null);
+                            }}
+                            onMouseEnter={(e) => {
+                              (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                                ? 'rgba(78,205,196,0.12)' : 'rgba(78,205,196,0.08)';
+                            }}
+                            onMouseLeave={(e) => {
+                              (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                                ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+                            }}
+                          >
+                            {/* Thumbnail */}
+                            {isAudio ? (
+                              <span style={{
+                                width: '36px', height: '36px', borderRadius: '8px',
+                                backgroundColor: darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '18px', flexShrink: 0,
+                              }}>♪</span>
+                            ) : (
+                              <img
+                                src={getAssetFullUrl(asset)}
+                                alt=""
+                                style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
+                              />
+                            )}
+                            {/* Name */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{
+                                fontWeight: 700, fontSize: '13px',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>
+                                {asset.original_name}
+                              </div>
+                              <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3' }}>
+                                {(asset.size / 1024).toFixed(0)} KB
+                              </div>
+                            </div>
+                            {/* Edit category */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingAssetId(isEditing ? null : asset.id);
+                              }}
+                              style={{
+                                background: 'none', border: 'none',
+                                color: darkMode ? '#636E72' : '#B2BEC3',
+                                cursor: 'pointer', padding: '4px', borderRadius: '6px', flexShrink: 0,
+                              }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = '#4ECDC4'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = darkMode ? '#636E72' : '#B2BEC3'; }}
+                              title="Change category"
+                            >
+                              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                              </svg>
+                            </button>
+                            {/* Delete */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteAsset(asset);
+                              }}
+                              style={{
+                                background: 'none', border: 'none',
+                                color: '#FF6B6B', cursor: 'pointer',
+                                padding: '4px', borderRadius: '6px', flexShrink: 0, opacity: 0.5,
+                              }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.5'; }}
+                              title="Delete from library"
+                            >
+                              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"/>
+                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                              </svg>
+                            </button>
+                          </div>
+                          {/* Category editor dropdown */}
+                          {isEditing && (
+                            <div style={{
+                              display: 'flex', gap: '4px', padding: '6px 12px',
+                              marginTop: '2px',
+                            }}>
+                              {ASSET_CATEGORIES.map((cat) => (
+                                <button
+                                  key={cat.key}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (cat.key !== asset.category) {
+                                      handleChangeAssetCategory(asset, cat.key);
+                                    }
+                                    setEditingAssetId(null);
+                                  }}
+                                  style={{
+                                    flex: 1,
+                                    padding: '6px 4px',
+                                    borderRadius: '8px',
+                                    border: `1px solid ${cat.key === asset.category ? '#4ECDC4' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)')}`,
+                                    backgroundColor: cat.key === asset.category
+                                      ? (darkMode ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)')
+                                      : 'transparent',
+                                    color: cat.key === asset.category ? '#4ECDC4' : (darkMode ? '#B2BEC3' : '#636E72'),
+                                    fontWeight: 700,
+                                    fontSize: '11px',
+                                    cursor: 'pointer',
+                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px',
+                                  }}
+                                >
+                                  <span>{cat.icon}</span>
+                                  <span>{cat.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
