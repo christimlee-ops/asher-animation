@@ -16,6 +16,8 @@ interface TopBarProps {
   canRedo: boolean;
   projectName: string;
   compact?: boolean;
+  onImportAudio?: () => void;
+  isOwner?: boolean;
 }
 
 export default function TopBar({
@@ -33,6 +35,8 @@ export default function TopBar({
   canRedo,
   projectName,
   compact = false,
+  onImportAudio,
+  isOwner = true,
 }: TopBarProps) {
   const { user, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -177,8 +181,9 @@ export default function TopBar({
               {[
                 { label: '📄 New', action: onNewProject },
                 { label: '📂 Open', action: onOpen },
-                { label: '💾 Save', action: onSave },
+                ...(isOwner ? [{ label: '💾 Save', action: onSave }] : []),
                 { label: '📋 Save As', action: onSaveAs },
+                { label: '🎵 Import Audio', action: onImportAudio || (() => {}) },
                 { label: exporting ? '⏳ Exporting...' : '🎬 Export', action: onExport, disabled: exporting },
                 { label: `👤 ${displayName}`, action: () => {}, disabled: true },
                 { label: '🚪 Logout', action: logout },
@@ -229,11 +234,16 @@ export default function TopBar({
         <button style={styles.btn()} onClick={onOpen} onMouseEnter={hover} onMouseLeave={unhover}>
           📂 Open
         </button>
-        <button style={styles.btn()} onClick={onSave} onMouseEnter={hover} onMouseLeave={unhover}>
-          💾 Save
-        </button>
+        {isOwner && (
+          <button style={styles.btn()} onClick={onSave} onMouseEnter={hover} onMouseLeave={unhover}>
+            💾 Save
+          </button>
+        )}
         <button style={styles.btn()} onClick={onSaveAs} onMouseEnter={hover} onMouseLeave={unhover}>
           📋 Save As
+        </button>
+        <button style={styles.btn()} onClick={onImportAudio} onMouseEnter={hover} onMouseLeave={unhover}>
+          🎵 Audio
         </button>
         <button
           style={styles.btn(exporting)}

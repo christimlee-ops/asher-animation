@@ -9,15 +9,17 @@ import type { CanvasHandle } from '../components/editor/Canvas';
 import PropertiesPanel from '../components/editor/PropertiesPanel';
 import TimelinePanel from '../components/editor/Timeline';
 import { createDefaultState } from '../lib/animationState';
-import type { AnimationState } from '../lib/animationState';
+import type { AnimationState, AudioTrack } from '../lib/animationState';
 import { exportToMp4 } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
 import { useIsTablet } from '../lib/useMediaQuery';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function EditorPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
   const [activeTool, setActiveTool] = useState<ToolName>('select');
   const [fillColor, _setFillColor] = useState('#4ECDC4');
@@ -25,6 +27,7 @@ export default function EditorPage() {
   const [selectedObject, setSelectedObject] = useState<fabric.FabricObject | null>(null);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(projectId || null);
   const [projectName, setProjectName] = useState('Untitled');
+  const [projectOwnerId, setProjectOwnerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
   const [canUndo, setCanUndo] = useState(false);
@@ -36,6 +39,9 @@ export default function EditorPage() {
   const [canvasVersion, setCanvasVersion] = useState(0);
   const isTablet = useIsTablet();
   const canvasRef = useRef<CanvasHandle>(null);
+
+  // Ownership: true if new project or if current user is the owner
+  const isOwner = !currentProjectId || !projectOwnerId || String(projectOwnerId) === String(user?.id);
 
   const handleHistoryChange = useCallback((undo: boolean, redo: boolean) => {
     setCanUndo(undo);
@@ -53,6 +59,33 @@ export default function EditorPage() {
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) canvasRef.current?.importFile(file);
+    };
+    input.click();
+  }, []);
+
+  const handleImportAudio = useCallback(() => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.mp3,.wav,.ogg,.m4a,.aac,.webm';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const track: AudioTrack = {
+          id: `audio_${Date.now()}`,
+          name: file.name.replace(/\.[^.]+$/, ''),
+          dataUrl,
+          startFrame: 0,
+          volume: 1,
+        };
+        setAnimState((prev) => ({
+          ...prev,
+          audioTracks: [...(prev.audioTracks || []), track],
+        }));
+      };
+      reader.readAsDataURL(file);
     };
     input.click();
   }, []);
@@ -144,6 +177,7 @@ export default function EditorPage() {
     loadProject(projectId)
       .then(async (proj) => {
         setCurrentProjectId(proj.id);
+        setProjectOwnerId(proj.user_id ? String(proj.user_id) : null);
         setProjectName(proj.name || 'Untitled');
         if (proj.data) {
           const data = typeof proj.data === 'string' ? JSON.parse(proj.data) : proj.data;
@@ -169,6 +203,11 @@ export default function EditorPage() {
   }, [projectId]);
 
   const handleSave = () => {
+    if (!isOwner) {
+      // Non-owners can only Save As
+      handleSaveAs();
+      return;
+    }
     if (currentProjectId) {
       // Existing project — show dialog to allow renaming
       setSaveModalMode('save');
@@ -192,7 +231,8 @@ export default function EditorPage() {
     const canvasJson = canvasRef.current?.toJSON();
     if (!canvasJson) return;
     const finalName = name.trim() || 'Untitled';
-    // Bundle canvas + animation state together
+    // Non-owners are forced to save as copy
+    const forceCopy = !isOwner;
     const json = { canvas: canvasJson, animState };
     console.log('[SAVE] animState timelines:', animState.timelines.length, 'objects:', (canvasJson as any).objects?.length);
     console.log('[SAVE] _animIds on objects:', (canvasJson as any).objects?.map((o: any) => o._animId).filter(Boolean));
@@ -200,8 +240,8 @@ export default function EditorPage() {
     setSaveStatus('');
     setShowSaveModal(false);
     try {
-      if (currentProjectId && !asCopy) {
-        // Update existing project
+      if (currentProjectId && !asCopy && !forceCopy) {
+        // Update existing project (only owner)
         await apiPut(`/projects/${currentProjectId}`, { name: finalName, data: json });
         setProjectName(finalName);
       } else {
@@ -211,6 +251,7 @@ export default function EditorPage() {
           data: json,
         });
         setCurrentProjectId(String(res.project.id));
+        setProjectOwnerId(user?.id ? String(user.id) : null);
         setProjectName(finalName);
         navigate(`/editor/${res.project.id}`, { replace: true });
       }
@@ -319,6 +360,8 @@ export default function EditorPage() {
           canRedo={canRedo}
           projectName={projectName}
           compact={isTablet}
+          onImportAudio={handleImportAudio}
+          isOwner={isOwner}
         />
       </div>
 

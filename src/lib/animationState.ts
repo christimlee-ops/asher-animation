@@ -17,10 +17,19 @@ export interface ObjectTimeline {
   keyframes: Keyframe[];
 }
 
+export interface AudioTrack {
+  id: string;
+  name: string;
+  dataUrl: string; // base64 data URL for persistence
+  startFrame: number; // frame where audio starts playing
+  volume: number; // 0-1
+}
+
 export interface AnimationState {
   fps: number;
   totalFrames: number;
   timelines: ObjectTimeline[];
+  audioTracks?: AudioTrack[];
 }
 
 export function createDefaultState(): AnimationState {
@@ -28,6 +37,7 @@ export function createDefaultState(): AnimationState {
     fps: 24,
     totalFrames: 24 * 10, // 10 seconds default
     timelines: [],
+    audioTracks: [],
   };
 }
 

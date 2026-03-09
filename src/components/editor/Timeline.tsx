@@ -70,6 +70,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const frameAreaRef = useRef<HTMLDivElement | null>(null);
   const labelColRef = useRef<HTMLDivElement | null>(null);
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
+  const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   // Timeline zoom
   const [frameZoom, setFrameZoom] = useState(5); // pixels per frame
@@ -344,6 +345,72 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, fps, lastKeyframeFrame]);
+
+  // ─── Audio playback sync ─────────────────────────────────────
+  const audioTracks = animState.audioTracks || [];
+
+  // Create/update audio elements when tracks change
+  useEffect(() => {
+    const map = audioElementsRef.current;
+    // Add new tracks
+    for (const track of audioTracks) {
+      if (!map.has(track.id)) {
+        const audio = new Audio(track.dataUrl);
+        audio.volume = track.volume;
+        audio.preload = 'auto';
+        map.set(track.id, audio);
+      } else {
+        const audio = map.get(track.id)!;
+        audio.volume = track.volume;
+      }
+    }
+    // Remove deleted tracks
+    const trackIds = new Set(audioTracks.map((t) => t.id));
+    for (const [id, audio] of map.entries()) {
+      if (!trackIds.has(id)) {
+        audio.pause();
+        map.delete(id);
+      }
+    }
+  }, [audioTracks]);
+
+  // Play/pause audio with animation
+  useEffect(() => {
+    const map = audioElementsRef.current;
+    for (const track of audioTracks) {
+      const audio = map.get(track.id);
+      if (!audio) continue;
+      const offsetFrames = currentFrame - track.startFrame;
+      const offsetSec = offsetFrames / fps;
+      if (isPlaying && offsetFrames >= 0) {
+        if (audio.paused) {
+          audio.currentTime = offsetSec;
+          audio.play().catch(() => {});
+        }
+      } else {
+        audio.pause();
+        if (offsetFrames >= 0) {
+          audio.currentTime = offsetSec;
+        } else {
+          audio.currentTime = 0;
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying]);
+
+  // Sync audio time on scrub
+  useEffect(() => {
+    if (isPlaying) return; // playback handles its own sync
+    const map = audioElementsRef.current;
+    for (const track of audioTracks) {
+      const audio = map.get(track.id);
+      if (!audio) continue;
+      const offsetSec = (currentFrame - track.startFrame) / fps;
+      audio.currentTime = Math.max(0, offsetSec);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFrame]);
 
   // ─── Scrub to frame ────────────────────────────────────────────
   const scrubTo = useCallback((frame: number) => {
@@ -926,6 +993,46 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                 </div>
               );
             })}
+            {/* Audio track labels */}
+            {audioTracks.map((track) => (
+              <div
+                key={track.id}
+                style={{
+                  height: `${ROW_H}px`,
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0 4px',
+                  borderBottom: `1px solid ${border}`,
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  overflow: 'hidden',
+                  whiteSpace: 'nowrap',
+                  color: '#FF6B6B',
+                  backgroundColor: darkMode ? 'rgba(255,107,107,0.08)' : 'rgba(255,107,107,0.04)',
+                  userSelect: 'none',
+                }}
+              >
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  🎵 {track.name}
+                </span>
+                <span
+                  title="Remove audio track"
+                  onClick={() => {
+                    const map = audioElementsRef.current;
+                    const audio = map.get(track.id);
+                    if (audio) { audio.pause(); map.delete(track.id); }
+                    onAnimStateChange({
+                      ...animState,
+                      audioTracks: audioTracks.filter((t) => t.id !== track.id),
+                    });
+                  }}
+                  style={{ cursor: 'pointer', fontSize: '11px', padding: '0 3px', flexShrink: 0, opacity: 0.7 }}
+                >
+                  ✕
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -980,7 +1087,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
           </div>
 
           {/* Layer rows with keyframes */}
-          <div style={{ width: `${totalW}px`, position: 'relative', minHeight: `${rows.length * ROW_H}px` }}>
+          <div style={{ width: `${totalW}px`, position: 'relative', minHeight: `${(rows.length + audioTracks.length) * ROW_H}px` }}>
             {/* Last keyframe marker — inside rows container so it scrolls with content */}
             {lastKeyframeFrame > 0 && (
               <div style={{
@@ -1062,6 +1169,49 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                       />
                     );
                   })}
+                </div>
+              );
+            })}
+            {/* Audio track rows */}
+            {audioTracks.map((track) => {
+              const audioDurationSec = audioElementsRef.current.get(track.id)?.duration || 0;
+              const audioDurationFrames = Math.ceil(audioDurationSec * fps);
+              const barLeft = track.startFrame * FRAME_W;
+              const barWidth = audioDurationFrames * FRAME_W;
+              return (
+                <div
+                  key={track.id}
+                  style={{
+                    height: `${ROW_H}px`,
+                    borderBottom: `1px solid ${border}`,
+                    position: 'relative',
+                    backgroundColor: darkMode ? 'rgba(255,107,107,0.05)' : 'rgba(255,107,107,0.02)',
+                  }}
+                >
+                  {/* Audio duration bar */}
+                  {audioDurationFrames > 0 && (
+                    <div style={{
+                      position: 'absolute',
+                      left: `${barLeft}px`,
+                      width: `${barWidth}px`,
+                      top: `${ROW_H / 2 - 4}px`,
+                      height: '8px',
+                      backgroundColor: darkMode ? 'rgba(255,107,107,0.4)' : 'rgba(255,107,107,0.3)',
+                      borderRadius: '4px',
+                      pointerEvents: 'none',
+                    }} />
+                  )}
+                  {/* Start marker */}
+                  <div style={{
+                    position: 'absolute',
+                    left: `${barLeft - 3}px`,
+                    top: `${ROW_H / 2 - 5}px`,
+                    width: '6px',
+                    height: '10px',
+                    backgroundColor: '#FF6B6B',
+                    borderRadius: '2px',
+                    cursor: 'default',
+                  }} title={`Audio starts at frame ${track.startFrame}`} />
                 </div>
               );
             })}

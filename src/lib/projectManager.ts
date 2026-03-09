@@ -3,6 +3,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from './api';
 // Server project shape (matches DB columns)
 export interface ServerProject {
   id: string;
+  user_id?: string | number;
   name: string;
   data: any;
   thumbnail?: string | null;
