@@ -59,6 +59,8 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const [isScrubbing, setIsScrubbing] = useState(false);
   // Dragging a keyframe diamond
   const [draggingKf, setDraggingKf] = useState<{ objectId: string; fromFrame: number; toFrame: number } | null>(null);
+  // Dragging an audio track
+  const [draggingAudio, setDraggingAudio] = useState<{ trackId: string; startX: number; origFrame: number } | null>(null);
   // selectedAnimId: the object selected for keyframing (may be a group child)
   const [selectedAnimId, setSelectedAnimId] = useState<string | null>(null);
   // Track which group is in "edit children" mode
@@ -498,6 +500,35 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draggingKf, totalFrames, FRAME_W, animState, onAnimStateChange]);
+
+  // ─── Audio track drag ─────────────────────────────────────────
+  useEffect(() => {
+    if (!draggingAudio) return;
+    const handleMove = (e: MouseEvent) => {
+      const area = frameAreaRef.current;
+      if (!area) return;
+      const dx = e.clientX - draggingAudio.startX;
+      const frameDelta = Math.round(dx / FRAME_W);
+      const newStart = Math.max(0, draggingAudio.origFrame + frameDelta);
+      onAnimStateChange({
+        ...animState,
+        audioTracks: (animState.audioTracks || []).map((t) =>
+          t.id === draggingAudio.trackId ? { ...t, startFrame: newStart } : t
+        ),
+      });
+    };
+    const handleUp = () => {
+      setDraggingAudio(null);
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draggingAudio, FRAME_W, animState, onAnimStateChange]);
+
 
   // ─── Exit group edit mode ────────────────────────────────────────
   const exitGroupEdit = useCallback(() => {
@@ -1188,30 +1219,28 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                     backgroundColor: darkMode ? 'rgba(255,107,107,0.05)' : 'rgba(255,107,107,0.02)',
                   }}
                 >
-                  {/* Audio duration bar */}
-                  {audioDurationFrames > 0 && (
-                    <div style={{
+                  {/* Audio duration bar — draggable */}
+                  <div
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      setDraggingAudio({ trackId: track.id, startX: e.clientX, origFrame: track.startFrame });
+                    }}
+                    style={{
                       position: 'absolute',
                       left: `${barLeft}px`,
-                      width: `${barWidth}px`,
-                      top: `${ROW_H / 2 - 4}px`,
-                      height: '8px',
-                      backgroundColor: darkMode ? 'rgba(255,107,107,0.4)' : 'rgba(255,107,107,0.3)',
+                      width: `${Math.max(barWidth, 12)}px`,
+                      top: `${ROW_H / 2 - 5}px`,
+                      height: '10px',
+                      backgroundColor: draggingAudio?.trackId === track.id
+                        ? (darkMode ? 'rgba(255,107,107,0.6)' : 'rgba(255,107,107,0.5)')
+                        : (darkMode ? 'rgba(255,107,107,0.4)' : 'rgba(255,107,107,0.3)'),
                       borderRadius: '4px',
-                      pointerEvents: 'none',
-                    }} />
-                  )}
-                  {/* Start marker */}
-                  <div style={{
-                    position: 'absolute',
-                    left: `${barLeft - 3}px`,
-                    top: `${ROW_H / 2 - 5}px`,
-                    width: '6px',
-                    height: '10px',
-                    backgroundColor: '#FF6B6B',
-                    borderRadius: '2px',
-                    cursor: 'default',
-                  }} title={`Audio starts at frame ${track.startFrame}`} />
+                      cursor: draggingAudio ? 'grabbing' : 'grab',
+                      border: '1px solid rgba(255,107,107,0.5)',
+                    }}
+                    title={`Drag to move — starts at frame ${track.startFrame}`}
+                  />
                 </div>
               );
             })}
