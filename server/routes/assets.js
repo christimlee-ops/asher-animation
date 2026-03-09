@@ -27,11 +27,15 @@ const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/svg+xml', 'image/png', 'image/jpeg', 'image/gif'];
+    const allowed = [
+      'image/svg+xml', 'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+      'audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/aac', 'audio/webm',
+      'audio/x-m4a', 'audio/mp3',
+    ];
     if (allowed.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Only SVG, PNG, JPG, and GIF files are allowed'));
+      cb(new Error('Only image and audio files are allowed'));
     }
   }
 });
@@ -88,7 +92,7 @@ router.use((err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'File too large. Max 10MB.' });
     return res.status(400).json({ error: err.message });
   }
-  if (err.message && err.message.includes('Only SVG')) return res.status(400).json({ error: err.message });
+  if (err.message && (err.message.includes('Only image') || err.message.includes('Only SVG'))) return res.status(400).json({ error: err.message });
   next(err);
 });
 

@@ -1,4 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
+import type { MediaAsset } from '../../lib/mediaLibrary';
+import { getAssetFullUrl } from '../../lib/mediaLibrary';
 
 export type ToolName =
   | 'select'
@@ -25,6 +27,9 @@ interface ToolsPanelProps {
   onAction: (action: ActionName) => void;
   darkMode: boolean;
   compact?: boolean;
+  libraryAssets?: MediaAsset[];
+  onUseAsset?: (asset: MediaAsset) => void;
+  onDeleteAsset?: (asset: MediaAsset) => void;
 }
 
 const S = 18; // icon size
@@ -78,7 +83,11 @@ export default function ToolsPanel({
   onAction,
   darkMode,
   compact = false,
+  libraryAssets = [],
+  onUseAsset,
+  onDeleteAsset,
 }: ToolsPanelProps) {
+  const [libraryOpen, setLibraryOpen] = useState(true);
   const panelBg = darkMode ? '#16213e' : '#f0f1f3';
   const textColor = darkMode ? '#F5F6FA' : '#2D3436';
   const sectionBorder = darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
@@ -240,6 +249,96 @@ export default function ToolsPanel({
           <span>{a.label}</span>
         </button>
       ))}
+
+      {/* Media Library */}
+      <div
+        style={{ ...styles.sectionTitle, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+        onClick={() => setLibraryOpen(!libraryOpen)}
+      >
+        <span>Library</span>
+        <span style={{ fontSize: '10px' }}>{libraryOpen ? '▼' : '▶'}</span>
+      </div>
+      {libraryOpen && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          {libraryAssets.length === 0 ? (
+            <div style={{ fontSize: '11px', color: darkMode ? '#636E72' : '#B2BEC3', padding: '8px 4px', textAlign: 'center' }}>
+              Import files to build your library
+            </div>
+          ) : (
+            libraryAssets.map((asset) => {
+              const isAudio = asset.mime_type.startsWith('audio/');
+              return (
+                <div
+                  key={asset.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '4px 8px',
+                    borderRadius: '8px',
+                    backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    color: textColor,
+                    transition: 'background-color 0.15s',
+                  }}
+                  onClick={() => onUseAsset?.(asset)}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                      ? 'rgba(78,205,196,0.15)' : 'rgba(78,205,196,0.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLElement).style.backgroundColor = darkMode
+                      ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+                  }}
+                  title={`Click to add: ${asset.original_name}`}
+                >
+                  {isAudio ? (
+                    <span style={{ fontSize: '16px', flexShrink: 0 }}>♪</span>
+                  ) : (
+                    <img
+                      src={getAssetFullUrl(asset)}
+                      alt=""
+                      style={{ width: '24px', height: '24px', objectFit: 'cover', borderRadius: '4px', flexShrink: 0 }}
+                    />
+                  )}
+                  <span style={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    fontWeight: 600,
+                  }}>
+                    {asset.original_name}
+                  </span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteAsset?.(asset);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#FF6B6B',
+                      cursor: 'pointer',
+                      fontSize: '11px',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      flexShrink: 0,
+                      opacity: 0.6,
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.opacity = '0.6'; }}
+                    title="Remove from library"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 }

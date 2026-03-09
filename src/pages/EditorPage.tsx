@@ -13,6 +13,8 @@ import type { AnimationState, AudioTrack } from '../lib/animationState';
 import { exportToMp4 } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
+import { uploadAsset, listAssets, deleteAsset, getAssetFullUrl, isAudioAsset } from '../lib/mediaLibrary';
+import type { MediaAsset } from '../lib/mediaLibrary';
 import { useIsTablet } from '../lib/useMediaQuery';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -37,11 +39,17 @@ export default function EditorPage() {
   const [exportStatus, setExportStatus] = useState('');
   const [timelineCollapsed, setTimelineCollapsed] = useState(false);
   const [canvasVersion, setCanvasVersion] = useState(0);
+  const [libraryAssets, setLibraryAssets] = useState<MediaAsset[]>([]);
   const isTablet = useIsTablet();
   const canvasRef = useRef<CanvasHandle>(null);
 
   // Ownership: true if new project or if current user is the owner
   const isOwner = !currentProjectId || !projectOwnerId || String(projectOwnerId) === String(user?.id);
+
+  // Fetch media library on mount
+  useEffect(() => {
+    listAssets().then(setLibraryAssets).catch(() => {});
+  }, []);
 
   const handleHistoryChange = useCallback((undo: boolean, redo: boolean) => {
     setCanUndo(undo);
@@ -80,8 +88,73 @@ export default function EditorPage() {
       } else {
         canvasRef.current?.importFile(file);
       }
+      // Upload to media library in the background
+      uploadAsset(file)
+        .then((asset) => {
+          setLibraryAssets((prev) => [asset, ...prev]);
+        })
+        .catch((err) => console.warn('Failed to save to library:', err));
     };
     input.click();
+  }, []);
+
+  const handleUseAsset = useCallback((asset: MediaAsset) => {
+    const fullUrl = getAssetFullUrl(asset);
+    if (isAudioAsset(asset)) {
+      // Fetch the audio file and convert to data URL for timeline
+      fetch(fullUrl)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const track: AudioTrack = {
+              id: `audio_${Date.now()}`,
+              name: asset.original_name.replace(/\.[^.]+$/, ''),
+              dataUrl: reader.result as string,
+              startFrame: 0,
+              volume: 1,
+            };
+            setAnimState((prev) => ({
+              ...prev,
+              audioTracks: [...(prev.audioTracks || []), track],
+            }));
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => alert('Failed to load audio from library'));
+    } else {
+      // Image — add to canvas via fabric
+      const c = canvasRef.current?.getCanvas();
+      if (!c) return;
+      if (asset.mime_type === 'image/svg+xml') {
+        fabric.loadSVGFromURL(fullUrl).then((result) => {
+          const group = fabric.util.groupSVGElements(result.objects.filter(Boolean) as fabric.FabricObject[], result.options);
+          group.scaleToWidth(200);
+          c.add(group);
+          c.setActiveObject(group);
+          c.renderAll();
+        });
+      } else {
+        const imgEl = new Image();
+        imgEl.crossOrigin = 'anonymous';
+        imgEl.onload = () => {
+          const fImg = new fabric.FabricImage(imgEl);
+          fImg.scaleToWidth(200);
+          c.add(fImg);
+          c.setActiveObject(fImg);
+          c.renderAll();
+        };
+        imgEl.src = fullUrl;
+      }
+    }
+  }, []);
+
+  const handleDeleteAsset = useCallback((asset: MediaAsset) => {
+    deleteAsset(asset.id)
+      .then(() => {
+        setLibraryAssets((prev) => prev.filter((a) => a.id !== asset.id));
+      })
+      .catch(() => alert('Failed to delete asset'));
   }, []);
 
   const handleExport = useCallback(async () => {
@@ -366,6 +439,9 @@ export default function EditorPage() {
           onAction={handleAction}
           darkMode={darkMode}
           compact={isTablet}
+          libraryAssets={libraryAssets}
+          onUseAsset={handleUseAsset}
+          onDeleteAsset={handleDeleteAsset}
         />
       </div>
 
