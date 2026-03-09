@@ -400,28 +400,31 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
       if (!audio) continue;
       const offsetFrames = currentFrame - track.startFrame;
       const offsetSec = offsetFrames / fps;
-      const shouldPlay = isPlaying && offsetFrames >= 0 && audio.readyState >= 2;
 
-      if (shouldPlay) {
-        // Keep audio in sync — only seek if drifted more than 0.3s
-        const drift = Math.abs(audio.currentTime - offsetSec);
+      if (isPlaying && offsetFrames >= 0) {
+        // Audio should be playing
         if (audio.paused) {
-          audio.currentTime = offsetSec;
-          audio.play().catch((err) => console.warn('Audio play failed:', err));
-        } else if (drift > 0.3) {
-          audio.currentTime = offsetSec;
+          // Set time and play — works even if audio is still loading (browsers buffer data URLs)
+          try { audio.currentTime = offsetSec; } catch (_) { /* ignore if not seekable yet */ }
+          audio.play().catch(() => {});
+        } else {
+          // Correct drift if more than 0.3s off
+          const drift = Math.abs(audio.currentTime - offsetSec);
+          if (drift > 0.3) {
+            audio.currentTime = offsetSec;
+          }
         }
-      } else if (!audio.paused) {
-        audio.pause();
-      }
-
-      // If not playing, sync position for scrubbing
-      if (!isPlaying && audio.readyState >= 2 && offsetFrames >= 0) {
-        audio.currentTime = offsetSec;
+      } else {
+        // Before startFrame or animation paused
+        if (!audio.paused) audio.pause();
+        // Pre-seek so it's ready when we reach startFrame
+        if (offsetFrames >= 0) {
+          try { audio.currentTime = offsetSec; } catch (_) {}
+        }
       }
     }
 
-    // Pause any audio that no longer has a track
+    // Pause any orphaned audio
     const trackIds = new Set(tracks.map((t) => t.id));
     for (const [id, audio] of map.entries()) {
       if (!trackIds.has(id) && !audio.paused) audio.pause();
