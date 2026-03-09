@@ -327,6 +327,10 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         // Add the pivot control and override rotation control
         obj.controls.pivot = pivotControl;
         obj.controls.mtr = rotateControl;
+        // Recursively style children inside groups
+        if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+          obj.getObjects().forEach((child) => styleHandles(child));
+        }
       };
       fc.on('object:added', (e) => { if (e.target) styleHandles(e.target); });
 
