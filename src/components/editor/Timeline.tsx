@@ -608,6 +608,30 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     window.addEventListener('mouseup', onUp);
   }, [ROW_H]);
 
+  // ─── Move layer up/down within its container ───────────────────
+  const moveLayerInContainer = useCallback((row: TimelineRow, direction: 'up' | 'down') => {
+    if (!canvas) return;
+    const container: any = row.parentGroup || canvas;
+    const objs = container.getObjects() as fabric.FabricObject[];
+    const idx = objs.indexOf(row.obj);
+    if (idx === -1) return;
+    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= objs.length) return;
+
+    container.remove(row.obj);
+    container.insertAt(newIdx, row.obj);
+
+    if (container instanceof fabric.Group) {
+      container.dirty = true;
+      container.setCoords();
+      try { (container as any)._calcBounds(); } catch (_) {}
+    }
+    canvas.discardActiveObject();
+    canvas.renderAll();
+    onAnimStateChange({ ...animState });
+    forceUpdate((n) => n + 1);
+  }, [canvas, animState, onAnimStateChange]);
+
   // ─── FPS / Duration controls ───────────────────────────────────
   const setFps = (newFps: number) => {
     const duration = totalFrames / fps;
@@ -806,6 +830,13 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
               const isDragInto = dropIndicator?.targetId === id && dropIndicator?.position === 'into' && isGroup;
               const isDragBefore = dropIndicator?.targetId === id && dropIndicator?.position === 'before';
               const isDragAfter = dropIndicator?.targetId === id && dropIndicator?.position === 'after';
+              // For arrow buttons: find siblings in the same container
+              const siblings = row.parentGroup
+                ? rows.filter((r) => r.parentGroup === row.parentGroup)
+                : rows.filter((r) => r.depth === 0);
+              const sibIdx = siblings.indexOf(row);
+              const canMoveUp = sibIdx > 0;
+              const canMoveDown = sibIdx < siblings.length - 1;
               return (
                 <div
                   key={id}
@@ -816,15 +847,15 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                   }}
                   style={{
                     height: `${ROW_H}px`,
+                    boxSizing: 'border-box',
                     display: 'flex',
                     alignItems: 'center',
-                    padding: '0 4px',
-                    paddingLeft: `${4 + row.depth * 12}px`,
+                    padding: '0 2px',
+                    paddingLeft: `${2 + row.depth * 12}px`,
                     borderBottom: `1px solid ${border}`,
                     fontSize: '11px',
                     fontWeight: isSelected ? 700 : 600,
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     color: isSelected ? accent : hasKf ? text : dimText,
                     backgroundColor: isDragInto
@@ -837,8 +868,11 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                             ? (darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
                             : 'transparent',
                     cursor: dropIndicator ? 'grabbing' : 'grab',
-                    borderTop: isDragBefore ? `2px solid ${accent}` : '2px solid transparent',
-                    borderBottom: isDragAfter ? `2px solid ${accent}` : undefined,
+                    boxShadow: isDragBefore
+                      ? `inset 0 2px 0 0 ${accent}`
+                      : isDragAfter
+                        ? `inset 0 -2px 0 0 ${accent}`
+                        : 'none',
                     borderLeft: isDragInto
                       ? `2px solid ${accent}`
                       : isSelected ? `2px solid ${accent}` : '2px solid transparent',
@@ -846,7 +880,33 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
                   }}
                   title={`${getLabel(row.obj)} — drag to reorder`}
                 >
-                  {isGroup ? (isDragInto ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {isGroup ? (isDragInto ? '📂 ' : isEditingThisGroup ? '📂 ' : '📁 ') : row.depth > 0 ? '  ' : ''}{getLabel(row.obj)}
+                  </span>
+                  {isSelected && (canMoveUp || canMoveDown) && (
+                    <span style={{ display: 'flex', gap: '1px', marginLeft: '2px', flexShrink: 0 }}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (canMoveUp) moveLayerInContainer(row, 'up'); }}
+                        style={{
+                          width: '16px', height: '16px', padding: 0, border: 'none', borderRadius: '3px',
+                          backgroundColor: canMoveUp ? (darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') : 'transparent',
+                          color: canMoveUp ? text : dimText, cursor: canMoveUp ? 'pointer' : 'default',
+                          fontSize: '9px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        title="Move up"
+                      >▲</button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (canMoveDown) moveLayerInContainer(row, 'down'); }}
+                        style={{
+                          width: '16px', height: '16px', padding: 0, border: 'none', borderRadius: '3px',
+                          backgroundColor: canMoveDown ? (darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)') : 'transparent',
+                          color: canMoveDown ? text : dimText, cursor: canMoveDown ? 'pointer' : 'default',
+                          fontSize: '9px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}
+                        title="Move down"
+                      >▼</button>
+                    </span>
+                  )}
                 </div>
               );
             })}
