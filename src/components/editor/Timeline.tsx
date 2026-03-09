@@ -223,6 +223,17 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     const applyToObjects = (objs: fabric.FabricObject[]) => {
       for (const obj of objs) {
         if ((obj as any).excludeFromExport || (obj as any)._isBoundary) continue;
+
+        // Recurse into group children FIRST so _calcBounds works on updated children
+        if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+          applyToObjects((obj as fabric.Group).getObjects());
+          // Recalculate group bounding box from children
+          (obj as any)._calcBounds();
+          obj.dirty = true;
+          obj.setCoords();
+        }
+
+        // Then apply this object's own keyframe animation (works for groups AND regular objects)
         const id = (obj as any)._animId;
         if (id) {
           const tl = animState.timelines.find((t) => t.objectId === id);
@@ -238,14 +249,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
               obj.setCoords();
             }
           }
-        }
-        // Recurse into groups
-        if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
-          applyToObjects((obj as fabric.Group).getObjects());
-          obj.dirty = true;
-          obj.setCoords();
-          // Force group to recalculate its bounding box around children
-          (obj as any)._calcBounds();
         }
       }
     };
