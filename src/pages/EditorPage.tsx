@@ -370,17 +370,32 @@ export default function EditorPage() {
         setProjectName(proj.name || 'Untitled');
         if (proj.data) {
           const data = typeof proj.data === 'string' ? JSON.parse(proj.data) : proj.data;
-          console.log('[LOAD] data keys:', Object.keys(data));
-          console.log('[LOAD] has animState:', !!data.animState, 'timelines:', data.animState?.timelines?.length);
-          // Support both old format (plain canvas) and new format ({ canvas, animState })
-          if (data.canvas) {
+          if (data.scenes && data.scenes.length > 0) {
+            // Project with scenes
+            setScenes(data.scenes);
+            const idx = data.activeSceneIndex || 0;
+            setActiveSceneIndex(idx);
+            const scene = data.scenes[idx];
+            if (scene.canvasJSON) await canvasRef.current?.loadJSON(scene.canvasJSON);
+            setAnimState(scene.animState || createDefaultState());
+          } else if (data.canvas) {
+            // Legacy: { canvas, animState } format
             await canvasRef.current?.loadJSON(data.canvas);
-            if (data.animState) {
-              console.log('[LOAD] Setting animState with', data.animState.timelines?.length, 'timelines');
-              setAnimState(data.animState);
-            }
+            const anim = data.animState || createDefaultState();
+            setAnimState(anim);
+            const s = createScene('Scene 1');
+            s.canvasJSON = data.canvas;
+            s.animState = anim;
+            setScenes([s]);
+            setActiveSceneIndex(0);
           } else {
+            // Very old format: plain canvas JSON
             await canvasRef.current?.loadJSON(data);
+            const s = createScene('Scene 1');
+            s.canvasJSON = data;
+            s.animState = createDefaultState();
+            setScenes([s]);
+            setActiveSceneIndex(0);
           }
           setCanvasVersion((v) => v + 1);
         }
