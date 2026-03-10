@@ -332,6 +332,12 @@ export default function EditorPage() {
         case 'flipV':
           handle.flipVerticalSelected();
           break;
+        case 'copy':
+          handle.copySelected();
+          break;
+        case 'paste':
+          handle.pasteClipboard();
+          break;
       }
     },
     [handleImport],

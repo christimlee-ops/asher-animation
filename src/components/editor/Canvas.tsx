@@ -27,6 +27,8 @@ export interface CanvasHandle {
   importFile: (file: File) => void;
   flipHorizontalSelected: () => void;
   flipVerticalSelected: () => void;
+  copySelected: () => void;
+  pasteClipboard: () => void;
 }
 
 interface CanvasProps {
@@ -996,6 +998,40 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           });
           fc.renderAll();
           saveHistory();
+        },
+        copySelected: () => {
+          const fc = fcRef.current;
+          if (!fc) return;
+          const active = fc.getActiveObject();
+          if (!active) return;
+          active.clone().then((cloned: fabric.FabricObject) => {
+            clipboardRef.current = cloned;
+          });
+        },
+        pasteClipboard: () => {
+          const fc = fcRef.current;
+          if (!fc || !clipboardRef.current) return;
+          clipboardRef.current.clone().then((cloned: fabric.FabricObject) => {
+            cloned.set({
+              left: (cloned.left || 0) + 20,
+              top: (cloned.top || 0) + 20,
+            });
+            if (cloned instanceof fabric.ActiveSelection) {
+              cloned.forEachObject((obj: fabric.FabricObject) => {
+                fc.add(obj);
+              });
+              fc.setActiveObject(cloned);
+            } else {
+              fc.add(cloned);
+              fc.setActiveObject(cloned);
+            }
+            clipboardRef.current!.set({
+              left: (clipboardRef.current!.left || 0) + 20,
+              top: (clipboardRef.current!.top || 0) + 20,
+            });
+            fc.renderAll();
+            saveHistory();
+          });
         },
         setBackgroundColor: (color: string) => {
           const fc = fcRef.current;
