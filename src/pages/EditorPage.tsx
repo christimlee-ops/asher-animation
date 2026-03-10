@@ -59,6 +59,7 @@ export default function EditorPage() {
   const [activeSceneIndex, setActiveSceneIndex] = useState(0);
   const [renamingSceneId, setRenamingSceneId] = useState<string | null>(null);
   const [sceneRenameValue, setSceneRenameValue] = useState('');
+  const [deleteSceneIndex, setDeleteSceneIndex] = useState<number | null>(null);
   const isTablet = useIsTablet();
   const isMobile = useIsMobile();
   const canvasRef = useRef<CanvasHandle>(null);
@@ -122,7 +123,13 @@ export default function EditorPage() {
 
   const deleteScene = useCallback((index: number) => {
     if (scenes.length <= 1) return;
-    if (!confirm(`Delete "${scenes[index].name}"? This cannot be undone.`)) return;
+    setDeleteSceneIndex(index);
+  }, [scenes]);
+
+  const confirmDeleteScene = useCallback(() => {
+    if (deleteSceneIndex === null) return;
+    const index = deleteSceneIndex;
+    setDeleteSceneIndex(null);
     const newScenes = scenes.filter((_, i) => i !== index);
     setScenes(newScenes);
 
@@ -145,7 +152,7 @@ export default function EditorPage() {
       setActiveSceneIndex(activeSceneIndex - 1);
     }
     setSelectedObject(null);
-  }, [scenes, activeSceneIndex]);
+  }, [deleteSceneIndex, scenes, activeSceneIndex]);
 
   // Fetch media library on mount
   useEffect(() => {
@@ -1532,6 +1539,67 @@ export default function EditorPage() {
                   </div>
                 );
               })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Scene Confirmation */}
+      {deleteSceneIndex !== null && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999,
+          }}
+          onClick={() => setDeleteSceneIndex(null)}
+        >
+          <div
+            style={{
+              backgroundColor: darkMode ? '#1a1a2e' : '#fff',
+              borderRadius: '16px', padding: '28px 32px', width: '360px', maxWidth: '90vw',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              color: darkMode ? '#F5F6FA' : '#2D3436',
+              textAlign: 'center',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '50%',
+              backgroundColor: 'rgba(255,107,107,0.12)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px',
+            }}>
+              <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#FF6B6B" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+              </svg>
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 800 }}>Delete Scene</h3>
+            <p style={{
+              margin: '0 0 24px', fontSize: '14px', lineHeight: 1.5,
+              color: darkMode ? '#B2BEC3' : '#636E72',
+            }}>
+              Are you sure you want to delete <strong style={{ color: darkMode ? '#F5F6FA' : '#2D3436' }}>"{scenes[deleteSceneIndex]?.name}"</strong>? This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setDeleteSceneIndex(null)}
+                style={{
+                  flex: 1, padding: '10px 16px', borderRadius: '10px',
+                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+                  backgroundColor: 'transparent',
+                  color: darkMode ? '#B2BEC3' : '#636E72',
+                  fontWeight: 700, fontSize: '14px', cursor: 'pointer',
+                }}
+              >Cancel</button>
+              <button
+                onClick={confirmDeleteScene}
+                style={{
+                  flex: 1, padding: '10px 16px', borderRadius: '10px', border: 'none',
+                  background: 'linear-gradient(135deg, #FF6B6B, #EE5A24)',
+                  color: '#fff', fontWeight: 700, fontSize: '14px', cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(255,107,107,0.3)',
+                }}
+              >Delete</button>
             </div>
           </div>
         </div>
