@@ -10,7 +10,7 @@ import PropertiesPanel from '../components/editor/PropertiesPanel';
 import TimelinePanel from '../components/editor/Timeline';
 import { createDefaultState, createScene } from '../lib/animationState';
 import type { AnimationState, AudioTrack, Scene } from '../lib/animationState';
-import { exportToMp4 } from '../lib/exportVideo';
+import { exportMultiScene } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
 import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES } from '../lib/mediaLibrary';
@@ -268,9 +268,13 @@ export default function EditorPage() {
     setExporting(true);
     setExportStatus('Starting export...');
     try {
-      const blob = await exportToMp4({
+      const canvasJson = canvasRef.current?.toJSON();
+      const blob = await exportMultiScene({
         canvas: c,
-        animState,
+        scenes,
+        activeSceneIndex,
+        currentCanvasJSON: canvasJson || {},
+        currentAnimState: animState,
         width: 1920,
         height: 1080,
         onProgress: setExportStatus,
@@ -290,7 +294,7 @@ export default function EditorPage() {
     } finally {
       setExporting(false);
     }
-  }, [animState, exporting, projectName]);
+  }, [animState, exporting, projectName, scenes, activeSceneIndex]);
 
   const handleAction = useCallback(
     (action: ActionName) => {

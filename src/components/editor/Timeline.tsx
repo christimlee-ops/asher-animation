@@ -302,7 +302,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
       }
     };
     applyToObjects(canvas.getObjects());
-    canvas.discardActiveObject();
     canvas.renderAll();
   }, [canvas, animState]);
 
