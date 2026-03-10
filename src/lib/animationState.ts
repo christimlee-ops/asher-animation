@@ -32,6 +32,23 @@ export interface AnimationState {
   audioTracks?: AudioTrack[];
 }
 
+export interface Scene {
+  id: string;
+  name: string;
+  canvasJSON: object | null; // fabric canvas JSON (null = not yet saved)
+  animState: AnimationState;
+}
+
+let _nextSceneId = 1;
+export function createScene(name?: string): Scene {
+  return {
+    id: `scene_${_nextSceneId++}`,
+    name: name || `Scene ${_nextSceneId - 1}`,
+    canvasJSON: null,
+    animState: createDefaultState(),
+  };
+}
+
 export function createDefaultState(): AnimationState {
   return {
     fps: 24,

@@ -8,8 +8,8 @@ import CanvasEditor from '../components/editor/Canvas';
 import type { CanvasHandle } from '../components/editor/Canvas';
 import PropertiesPanel from '../components/editor/PropertiesPanel';
 import TimelinePanel from '../components/editor/Timeline';
-import { createDefaultState } from '../lib/animationState';
-import type { AnimationState, AudioTrack } from '../lib/animationState';
+import { createDefaultState, createScene } from '../lib/animationState';
+import type { AnimationState, AudioTrack, Scene } from '../lib/animationState';
 import { exportToMp4 } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
@@ -48,12 +48,94 @@ export default function EditorPage() {
   const [renamingAssetId, setRenamingAssetId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [librarySearch, setLibrarySearch] = useState('');
+  const [scenes, setScenes] = useState<Scene[]>(() => {
+    const s = createScene('Scene 1');
+    s.animState = createDefaultState();
+    return [s];
+  });
+  const [activeSceneIndex, setActiveSceneIndex] = useState(0);
+  const [renamingSceneId, setRenamingSceneId] = useState<string | null>(null);
+  const [sceneRenameValue, setSceneRenameValue] = useState('');
   const isTablet = useIsTablet();
   const isMobile = useIsMobile();
   const canvasRef = useRef<CanvasHandle>(null);
 
   // Ownership: true if new project or if current user is the owner
   const isOwner = !currentProjectId || !projectOwnerId || String(projectOwnerId) === String(user?.id);
+
+  // ─── Scene management ─────────────────────────────────────────
+  const switchToScene = useCallback(async (index: number) => {
+    if (index === activeSceneIndex) return;
+    // Save current scene first
+    const canvasJson = canvasRef.current?.toJSON();
+    if (canvasJson) {
+      setScenes((prev) => prev.map((s, i) =>
+        i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s
+      ));
+    }
+    setActiveSceneIndex(index);
+    setSelectedObject(null);
+  }, [activeSceneIndex, animState]);
+
+  // Load scene canvas when activeSceneIndex changes
+  useEffect(() => {
+    const scene = scenes[activeSceneIndex];
+    if (!scene) return;
+    setAnimState(scene.animState);
+    if (scene.canvasJSON) {
+      canvasRef.current?.loadJSON(scene.canvasJSON);
+    } else {
+      canvasRef.current?.clear();
+    }
+    setCanvasVersion((v) => v + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSceneIndex]);
+
+  const addScene = useCallback(() => {
+    // Save current scene before adding new one
+    const canvasJson = canvasRef.current?.toJSON();
+    if (canvasJson) {
+      setScenes((prev) => prev.map((s, i) =>
+        i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s
+      ));
+    }
+    const newScene = createScene(`Scene ${scenes.length + 1}`);
+    setScenes((prev) => [...prev, newScene]);
+    setActiveSceneIndex(scenes.length);
+    setAnimState(createDefaultState());
+    setSelectedObject(null);
+    // Clear canvas for new scene
+    setTimeout(() => {
+      canvasRef.current?.clear();
+      setCanvasVersion((v) => v + 1);
+    }, 0);
+  }, [activeSceneIndex, animState, scenes.length]);
+
+  const deleteScene = useCallback((index: number) => {
+    if (scenes.length <= 1) return; // Don't delete last scene
+    setScenes((prev) => prev.filter((_, i) => i !== index));
+    if (index <= activeSceneIndex) {
+      const newIndex = Math.max(0, activeSceneIndex - (index < activeSceneIndex ? 1 : 0));
+      if (index === activeSceneIndex) {
+        // Switching to adjacent scene
+        const targetIndex = Math.min(newIndex, scenes.length - 2);
+        setActiveSceneIndex(targetIndex);
+        const targetScene = scenes[targetIndex >= index ? targetIndex + 1 : targetIndex];
+        if (targetScene) {
+          setAnimState(targetScene.animState);
+          if (targetScene.canvasJSON) {
+            canvasRef.current?.loadJSON(targetScene.canvasJSON);
+          } else {
+            canvasRef.current?.clear();
+          }
+          setCanvasVersion((v) => v + 1);
+        }
+      } else {
+        setActiveSceneIndex(newIndex);
+      }
+    }
+    setSelectedObject(null);
+  }, [scenes, activeSceneIndex]);
 
   // Fetch media library on mount
   useEffect(() => {
@@ -329,7 +411,11 @@ export default function EditorPage() {
     const finalName = name.trim() || 'Untitled';
     // Non-owners are forced to save as copy
     const forceCopy = !isOwner;
-    const json = { canvas: canvasJson, animState };
+    // Save current scene state before serializing
+    const updatedScenes = scenes.map((s, i) =>
+      i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s
+    );
+    const json = { canvas: canvasJson, animState, scenes: updatedScenes, activeSceneIndex };
     console.log('[SAVE] animState timelines:', animState.timelines.length, 'objects:', (canvasJson as any).objects?.length);
     console.log('[SAVE] _animIds on objects:', (canvasJson as any).objects?.map((o: any) => o._animId).filter(Boolean));
     setSaving(true);
@@ -383,12 +469,32 @@ export default function EditorPage() {
       setProjectName(proj.name || 'Untitled');
       if (proj.data) {
         const data = typeof proj.data === 'string' ? JSON.parse(proj.data) : proj.data;
-        if (data.canvas) {
+        if (data.scenes && data.scenes.length > 0) {
+          // Project with scenes
+          setScenes(data.scenes);
+          const idx = data.activeSceneIndex || 0;
+          setActiveSceneIndex(idx);
+          const scene = data.scenes[idx];
+          if (scene.canvasJSON) await canvasRef.current?.loadJSON(scene.canvasJSON);
+          setAnimState(scene.animState || createDefaultState());
+        } else if (data.canvas) {
+          // Legacy project without scenes — wrap in a single scene
           await canvasRef.current?.loadJSON(data.canvas);
-          if (data.animState) setAnimState(data.animState);
+          const anim = data.animState || createDefaultState();
+          setAnimState(anim);
+          const s = createScene('Scene 1');
+          s.canvasJSON = data.canvas;
+          s.animState = anim;
+          setScenes([s]);
+          setActiveSceneIndex(0);
         } else {
           await canvasRef.current?.loadJSON(data);
           setAnimState(createDefaultState());
+          const s = createScene('Scene 1');
+          s.canvasJSON = data;
+          s.animState = createDefaultState();
+          setScenes([s]);
+          setActiveSceneIndex(0);
         }
         setCanvasVersion((v) => v + 1);
       }
@@ -427,7 +533,7 @@ export default function EditorPage() {
     props: { gridArea: 'props', overflow: isMobile ? 'visible' : 'hidden', ...(isMobile ? { display: 'none' } : {}) } as React.CSSProperties,
     timeline: {
       gridArea: 'timeline',
-      height: timelineCollapsed ? '28px' : (isMobile ? '120px' : isTablet ? '150px' : '200px'),
+      height: timelineCollapsed ? '28px' : (isMobile ? '130px' : isTablet ? '160px' : '210px'),
       borderTop: darkMode ? '1px solid rgba(255,255,255,0.08)' : '1px solid #DFE6E9',
       boxShadow: '0 -2px 12px rgba(0,0,0,0.06)',
       overflow: 'hidden',
@@ -504,43 +610,182 @@ export default function EditorPage() {
 
       {/* Timeline */}
       <div style={styles.timeline}>
-        {/* Collapse/expand header bar */}
+        {/* Collapse/expand header bar with scene tabs */}
         <div
-          onClick={() => setTimelineCollapsed(!timelineCollapsed)}
           style={{
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0 12px',
             height: '28px',
             backgroundColor: darkMode ? '#1a1a2e' : '#f0f1f3',
             borderBottom: timelineCollapsed ? 'none' : `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : '#DFE6E9'}`,
-            cursor: 'pointer',
             userSelect: 'none',
             flexShrink: 0,
           }}
         >
-          <span style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            textTransform: 'uppercase',
-            letterSpacing: '0.8px',
-            color: darkMode ? '#96CEB4' : '#636E72',
-          }}>
-            Timeline
-          </span>
-          <span style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            color: darkMode ? '#636E72' : '#B2BEC3',
-          }}>
-            {timelineCollapsed ? '▲' : '▼'}
-          </span>
+          {/* Collapse toggle */}
+          <div
+            onClick={() => setTimelineCollapsed(!timelineCollapsed)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '0 10px',
+              cursor: 'pointer',
+              height: '100%',
+              flexShrink: 0,
+            }}
+          >
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.8px',
+              color: darkMode ? '#96CEB4' : '#636E72',
+            }}>
+              Timeline
+            </span>
+            <span style={{
+              fontSize: '10px',
+              fontWeight: 700,
+              color: darkMode ? '#636E72' : '#B2BEC3',
+            }}>
+              {timelineCollapsed ? '▲' : '▼'}
+            </span>
+          </div>
+
+          {/* Scene tabs */}
+          {!timelineCollapsed && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '2px',
+              flex: 1,
+              overflow: 'auto',
+              padding: '0 4px',
+              height: '100%',
+            }}>
+              <div style={{ width: '1px', height: '16px', backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', flexShrink: 0, margin: '0 4px' }} />
+              {scenes.map((scene, idx) => {
+                const isActive = idx === activeSceneIndex;
+                return (
+                  <div
+                    key={scene.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '2px 8px',
+                      borderRadius: '6px',
+                      backgroundColor: isActive
+                        ? (darkMode ? 'rgba(78,205,196,0.2)' : 'rgba(78,205,196,0.15)')
+                        : 'transparent',
+                      border: isActive ? '1px solid #4ECDC4' : '1px solid transparent',
+                      cursor: 'pointer',
+                      flexShrink: 0,
+                      height: '22px',
+                    }}
+                    onClick={() => switchToScene(idx)}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      setRenamingSceneId(scene.id);
+                      setSceneRenameValue(scene.name);
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (scenes.length > 1) deleteScene(idx);
+                    }}
+                  >
+                    {renamingSceneId === scene.id ? (
+                      <input
+                        autoFocus
+                        value={sceneRenameValue}
+                        onChange={(e) => setSceneRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setScenes((prev) => prev.map((s) =>
+                              s.id === scene.id ? { ...s, name: sceneRenameValue.trim() || scene.name } : s
+                            ));
+                            setRenamingSceneId(null);
+                          }
+                          if (e.key === 'Escape') setRenamingSceneId(null);
+                        }}
+                        onBlur={() => {
+                          setScenes((prev) => prev.map((s) =>
+                            s.id === scene.id ? { ...s, name: sceneRenameValue.trim() || scene.name } : s
+                          ));
+                          setRenamingSceneId(null);
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          width: '70px',
+                          padding: '0 4px',
+                          border: '1px solid #4ECDC4',
+                          borderRadius: '3px',
+                          backgroundColor: darkMode ? 'rgba(255,255,255,0.08)' : '#fff',
+                          color: darkMode ? '#F5F6FA' : '#2D3436',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          outline: 'none',
+                        }}
+                      />
+                    ) : (
+                      <span style={{
+                        fontSize: '10px',
+                        fontWeight: isActive ? 800 : 600,
+                        color: isActive ? '#4ECDC4' : (darkMode ? '#B2BEC3' : '#636E72'),
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {scene.name}
+                      </span>
+                    )}
+                    {scenes.length > 1 && isActive && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteScene(idx); }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: darkMode ? '#636E72' : '#B2BEC3',
+                          cursor: 'pointer',
+                          padding: '0',
+                          fontSize: '12px',
+                          lineHeight: 1,
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                        title="Delete scene"
+                      >×</button>
+                    )}
+                  </div>
+                );
+              })}
+              {/* Add scene button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); addScene(); }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '5px',
+                  border: `1px dashed ${darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)'}`,
+                  backgroundColor: 'transparent',
+                  color: darkMode ? '#636E72' : '#B2BEC3',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                  lineHeight: 1,
+                }}
+                title="Add new scene"
+              >+</button>
+            </div>
+          )}
         </div>
         {!timelineCollapsed && (
           <div style={{ flex: 1, overflow: 'hidden' }}>
             <TimelinePanel
-              key={canvasVersion}
+              key={`${canvasVersion}-${activeSceneIndex}`}
               canvas={canvasRef.current?.getCanvas() ?? null}
               animState={animState}
               onAnimStateChange={setAnimState}
