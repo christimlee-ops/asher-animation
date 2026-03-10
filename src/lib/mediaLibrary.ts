@@ -107,3 +107,56 @@ export function isAudioAsset(asset: MediaAsset): boolean {
 export function isImageAsset(asset: MediaAsset): boolean {
   return asset.mime_type.startsWith('image/');
 }
+
+// ─── Thumbnail cache ──────────────────────────────────────────────
+// Generates small preview images client-side and caches them in memory
+const thumbCache = new Map<number, string>();
+const thumbLoading = new Set<number>();
+
+export function getThumbnailUrl(asset: MediaAsset, size = 80): string | null {
+  if (asset.mime_type.startsWith('audio/')) return null;
+  if (thumbCache.has(asset.id)) return thumbCache.get(asset.id)!;
+
+  // Start generating if not already loading
+  if (!thumbLoading.has(asset.id)) {
+    thumbLoading.add(asset.id);
+    generateThumbnail(asset, size).then((dataUrl) => {
+      if (dataUrl) thumbCache.set(asset.id, dataUrl);
+      thumbLoading.delete(asset.id);
+    }).catch(() => {
+      thumbLoading.delete(asset.id);
+    });
+  }
+
+  return null; // Not ready yet
+}
+
+async function generateThumbnail(asset: MediaAsset, size: number): Promise<string | null> {
+  const url = getAssetFullUrl(asset);
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+      // Cover fit
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      resolve(canvas.toDataURL('image/jpeg', 0.6));
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+export function clearThumbnailCache(assetId?: number) {
+  if (assetId !== undefined) {
+    thumbCache.delete(assetId);
+  } else {
+    thumbCache.clear();
+  }
+}

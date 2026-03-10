@@ -13,7 +13,7 @@ import type { AnimationState, AudioTrack, Scene } from '../lib/animationState';
 import { exportMultiScene } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
-import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES } from '../lib/mediaLibrary';
+import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES, getThumbnailUrl, clearThumbnailCache } from '../lib/mediaLibrary';
 import type { MediaAsset, AssetCategory } from '../lib/mediaLibrary';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { useAuth } from '../contexts/AuthContext';
@@ -48,6 +48,8 @@ export default function EditorPage() {
   const [renamingAssetId, setRenamingAssetId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [librarySearch, setLibrarySearch] = useState('');
+  const [libraryPage, setLibraryPage] = useState(0);
+  const LIBRARY_PAGE_SIZE = 10;
   const [scenes, setScenes] = useState<Scene[]>(() => {
     const s = createScene('Scene 1');
     s.animState = createDefaultState();
@@ -241,6 +243,7 @@ export default function EditorPage() {
   const handleDeleteAsset = useCallback((asset: MediaAsset) => {
     deleteAsset(asset.id)
       .then(() => {
+        clearThumbnailCache(asset.id);
         setLibraryAssets((prev) => prev.filter((a) => a.id !== asset.id));
       })
       .catch(() => alert('Failed to delete asset'));
@@ -1177,7 +1180,7 @@ export default function EditorPage() {
                 type="text"
                 placeholder="Search all categories..."
                 value={librarySearch}
-                onChange={(e) => setLibrarySearch(e.target.value)}
+                onChange={(e) => { setLibrarySearch(e.target.value); setLibraryPage(0); }}
                 style={{
                   width: '100%',
                   padding: '9px 10px 9px 32px',
@@ -1215,7 +1218,7 @@ export default function EditorPage() {
                   return (
                     <button
                       key={cat.key}
-                      onClick={() => { setLibraryCategory(cat.key); setEditingAssetId(null); }}
+                      onClick={() => { setLibraryCategory(cat.key); setEditingAssetId(null); setLibraryPage(0); }}
                       style={{
                         flex: 1,
                         padding: isMobile ? '6px 4px' : '10px 8px',
@@ -1270,6 +1273,10 @@ export default function EditorPage() {
                     </div>
                   );
                 }
+                const totalPages = Math.ceil(filtered.length / LIBRARY_PAGE_SIZE);
+                const safePage = Math.min(libraryPage, totalPages - 1);
+                const pageStart = safePage * LIBRARY_PAGE_SIZE;
+                const pageAssets = filtered.slice(pageStart, pageStart + LIBRARY_PAGE_SIZE);
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     {searchTerm && (
@@ -1277,10 +1284,11 @@ export default function EditorPage() {
                         {filtered.length} result{filtered.length !== 1 ? 's' : ''} across all categories
                       </div>
                     )}
-                    {filtered.map((asset) => {
+                    {pageAssets.map((asset) => {
                       const isAudio = asset.mime_type.startsWith('audio/');
                       const isEditing = editingAssetId === asset.id;
                       const thumbSize = isMobile ? 44 : 56;
+                      const thumbUrl = !isAudio ? getThumbnailUrl(asset, thumbSize * 2) : null;
                       const matchedCat = searchTerm ? ASSET_CATEGORIES.find((c) => c.key === asset.category) : null;
                       return (
                         <div key={asset.id}>
@@ -1320,9 +1328,10 @@ export default function EditorPage() {
                               }}>♪</span>
                             ) : (
                               <img
-                                src={getAssetFullUrl(asset)}
+                                src={thumbUrl || getAssetFullUrl(asset)}
                                 alt=""
-                                style={{ width: `${thumbSize}px`, height: `${thumbSize}px`, objectFit: 'cover', borderRadius: '8px', flexShrink: 0 }}
+                                loading="lazy"
+                                style={{ width: `${thumbSize}px`, height: `${thumbSize}px`, objectFit: 'cover', borderRadius: '8px', flexShrink: 0, backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}
                               />
                             )}
                             {/* Name */}
@@ -1482,6 +1491,38 @@ export default function EditorPage() {
                         </div>
                       );
                     })}
+                    {/* Pagination */}
+                    {totalPages > 1 && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        gap: '6px', padding: '10px 0 4px', borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
+                        marginTop: '6px',
+                      }}>
+                        <button
+                          onClick={() => setLibraryPage(Math.max(0, safePage - 1))}
+                          disabled={safePage === 0}
+                          style={{
+                            padding: '4px 10px', borderRadius: '6px', border: 'none',
+                            backgroundColor: safePage === 0 ? 'transparent' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'),
+                            color: safePage === 0 ? (darkMode ? '#444' : '#ccc') : (darkMode ? '#B2BEC3' : '#636E72'),
+                            fontWeight: 700, fontSize: '12px', cursor: safePage === 0 ? 'default' : 'pointer',
+                          }}
+                        >‹ Prev</button>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: darkMode ? '#636E72' : '#B2BEC3' }}>
+                          {safePage + 1} / {totalPages}
+                        </span>
+                        <button
+                          onClick={() => setLibraryPage(Math.min(totalPages - 1, safePage + 1))}
+                          disabled={safePage >= totalPages - 1}
+                          style={{
+                            padding: '4px 10px', borderRadius: '6px', border: 'none',
+                            backgroundColor: safePage >= totalPages - 1 ? 'transparent' : (darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)'),
+                            color: safePage >= totalPages - 1 ? (darkMode ? '#444' : '#ccc') : (darkMode ? '#B2BEC3' : '#636E72'),
+                            fontWeight: 700, fontSize: '12px', cursor: safePage >= totalPages - 1 ? 'default' : 'pointer',
+                          }}
+                        >Next ›</button>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
