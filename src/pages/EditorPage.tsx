@@ -64,44 +64,50 @@ export default function EditorPage() {
   const isOwner = !currentProjectId || !projectOwnerId || String(projectOwnerId) === String(user?.id);
 
   // ─── Scene management ─────────────────────────────────────────
+  // Track whether we're in the middle of a scene switch to avoid re-entrancy
+  const switchingSceneRef = useRef(false);
+
   const switchToScene = useCallback(async (index: number) => {
-    if (index === activeSceneIndex) return;
+    if (index === activeSceneIndex || switchingSceneRef.current) return;
+    switchingSceneRef.current = true;
+
     // Save current scene first
     const canvasJson = canvasRef.current?.toJSON();
+    let updatedScenes = scenes;
     if (canvasJson) {
-      setScenes((prev) => prev.map((s, i) =>
+      updatedScenes = scenes.map((s, i) =>
         i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s
-      ));
+      );
+      setScenes(updatedScenes);
     }
+
+    // Load the target scene
+    const targetScene = updatedScenes[index];
+    if (targetScene) {
+      setAnimState(targetScene.animState);
+      if (targetScene.canvasJSON) {
+        await canvasRef.current?.loadJSON(targetScene.canvasJSON);
+      } else {
+        canvasRef.current?.clear();
+      }
+    }
+
     setActiveSceneIndex(index);
     setSelectedObject(null);
-  }, [activeSceneIndex, animState]);
-
-  // Load scene canvas when activeSceneIndex changes
-  useEffect(() => {
-    const scene = scenes[activeSceneIndex];
-    if (!scene) return;
-    setAnimState(scene.animState);
-    if (scene.canvasJSON) {
-      canvasRef.current?.loadJSON(scene.canvasJSON);
-    } else {
-      canvasRef.current?.clear();
-    }
     setCanvasVersion((v) => v + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSceneIndex]);
+    switchingSceneRef.current = false;
+  }, [activeSceneIndex, animState, scenes]);
 
   const addScene = useCallback(() => {
     // Save current scene before adding new one
     const canvasJson = canvasRef.current?.toJSON();
-    if (canvasJson) {
-      setScenes((prev) => prev.map((s, i) =>
-        i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s
-      ));
-    }
-    const newScene = createScene(`Scene ${scenes.length + 1}`);
-    setScenes((prev) => [...prev, newScene]);
-    setActiveSceneIndex(scenes.length);
+    const updatedScenes = canvasJson
+      ? scenes.map((s, i) => i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s)
+      : scenes;
+    const newScene = createScene(`Scene ${updatedScenes.length + 1}`);
+    const newScenes = [...updatedScenes, newScene];
+    setScenes(newScenes);
+    setActiveSceneIndex(newScenes.length - 1);
     setAnimState(createDefaultState());
     setSelectedObject(null);
     // Clear canvas for new scene
@@ -109,30 +115,30 @@ export default function EditorPage() {
       canvasRef.current?.clear();
       setCanvasVersion((v) => v + 1);
     }, 0);
-  }, [activeSceneIndex, animState, scenes.length]);
+  }, [activeSceneIndex, animState, scenes]);
 
   const deleteScene = useCallback((index: number) => {
-    if (scenes.length <= 1) return; // Don't delete last scene
-    setScenes((prev) => prev.filter((_, i) => i !== index));
-    if (index <= activeSceneIndex) {
-      const newIndex = Math.max(0, activeSceneIndex - (index < activeSceneIndex ? 1 : 0));
-      if (index === activeSceneIndex) {
-        // Switching to adjacent scene
-        const targetIndex = Math.min(newIndex, scenes.length - 2);
-        setActiveSceneIndex(targetIndex);
-        const targetScene = scenes[targetIndex >= index ? targetIndex + 1 : targetIndex];
-        if (targetScene) {
-          setAnimState(targetScene.animState);
-          if (targetScene.canvasJSON) {
-            canvasRef.current?.loadJSON(targetScene.canvasJSON);
-          } else {
-            canvasRef.current?.clear();
-          }
-          setCanvasVersion((v) => v + 1);
+    if (scenes.length <= 1) return;
+    const newScenes = scenes.filter((_, i) => i !== index);
+    setScenes(newScenes);
+
+    if (index === activeSceneIndex) {
+      // Deleted the active scene — switch to nearest
+      const targetIndex = Math.min(index, newScenes.length - 1);
+      setActiveSceneIndex(targetIndex);
+      const targetScene = newScenes[targetIndex];
+      if (targetScene) {
+        setAnimState(targetScene.animState);
+        if (targetScene.canvasJSON) {
+          canvasRef.current?.loadJSON(targetScene.canvasJSON);
+        } else {
+          canvasRef.current?.clear();
         }
-      } else {
-        setActiveSceneIndex(newIndex);
+        setCanvasVersion((v) => v + 1);
       }
+    } else if (index < activeSceneIndex) {
+      // Deleted a scene before the active one — adjust index
+      setActiveSceneIndex(activeSceneIndex - 1);
     }
     setSelectedObject(null);
   }, [scenes, activeSceneIndex]);

@@ -328,8 +328,7 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
       const frameDuration = 1000 / fps;
       if (elapsed >= frameDuration) {
         frame++;
-        if (frame > lastKeyframeFrame) {
-          frame = lastKeyframeFrame;
+        if (frame >= lastKeyframeFrame) {
           setCurrentFrame(lastKeyframeFrame);
           applyFrame(lastKeyframeFrame);
           setIsPlaying(false);
