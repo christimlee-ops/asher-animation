@@ -119,6 +119,7 @@ export default function EditorPage() {
 
   const deleteScene = useCallback((index: number) => {
     if (scenes.length <= 1) return;
+    if (!confirm(`Delete "${scenes[index].name}"? This cannot be undone.`)) return;
     const newScenes = scenes.filter((_, i) => i !== index);
     setScenes(newScenes);
 
