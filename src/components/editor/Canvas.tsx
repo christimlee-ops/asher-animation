@@ -702,7 +702,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           case 'line':
             shape = new fabric.Line(
               [drawStartRef.current.x, drawStartRef.current.y, drawStartRef.current.x, drawStartRef.current.y],
-              { ...common, fill: undefined },
+              { ...common, fill: undefined, stroke: strokeColor, strokeWidth: 3 },
             );
             break;
           case 'text':
