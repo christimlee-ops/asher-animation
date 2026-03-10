@@ -13,7 +13,7 @@ import type { AnimationState, AudioTrack, Scene } from '../lib/animationState';
 import { exportMultiScene } from '../lib/exportVideo';
 import { loadProject, listProjects, deleteProject } from '../lib/projectManager';
 import { apiPost, apiPut } from '../lib/api';
-import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES, getThumbnailUrl, clearThumbnailCache } from '../lib/mediaLibrary';
+import { uploadAsset, listAssets, deleteAsset, updateAssetCategory, renameAsset, getAssetFullUrl, isAudioAsset, ASSET_CATEGORIES, getThumbnailUrl, clearThumbnailCache, onThumbnailReady } from '../lib/mediaLibrary';
 import type { MediaAsset, AssetCategory } from '../lib/mediaLibrary';
 import { useIsTablet, useIsMobile } from '../lib/useMediaQuery';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,6 +49,7 @@ export default function EditorPage() {
   const [renameValue, setRenameValue] = useState('');
   const [librarySearch, setLibrarySearch] = useState('');
   const [libraryPage, setLibraryPage] = useState(0);
+  const [, setThumbRevision] = useState(0);
   const LIBRARY_PAGE_SIZE = 10;
   const [scenes, setScenes] = useState<Scene[]>(() => {
     const s = createScene('Scene 1');
@@ -149,6 +150,11 @@ export default function EditorPage() {
   // Fetch media library on mount
   useEffect(() => {
     listAssets().then(setLibraryAssets).catch(() => {});
+  }, []);
+
+  // Re-render when thumbnails finish generating
+  useEffect(() => {
+    return onThumbnailReady(() => setThumbRevision((r) => r + 1));
   }, []);
 
   const handleHistoryChange = useCallback((undo: boolean, redo: boolean) => {
@@ -1331,7 +1337,7 @@ export default function EditorPage() {
                                 src={thumbUrl || getAssetFullUrl(asset)}
                                 alt=""
                                 loading="lazy"
-                                style={{ width: `${thumbSize}px`, height: `${thumbSize}px`, objectFit: 'cover', borderRadius: '8px', flexShrink: 0, backgroundColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)' }}
+                                style={{ width: `${thumbSize}px`, height: `${thumbSize}px`, objectFit: 'cover', borderRadius: '8px', flexShrink: 0, backgroundColor: darkMode ? '#2a2a3e' : '#d8d9db' }}
                               />
                             )}
                             {/* Name */}

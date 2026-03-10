@@ -112,6 +112,16 @@ export function isImageAsset(asset: MediaAsset): boolean {
 // Generates small preview images client-side and caches them in memory
 const thumbCache = new Map<number, string>();
 const thumbLoading = new Set<number>();
+const thumbListeners = new Set<() => void>();
+
+export function onThumbnailReady(cb: () => void) {
+  thumbListeners.add(cb);
+  return () => { thumbListeners.delete(cb); };
+}
+
+function notifyThumbnailReady() {
+  thumbListeners.forEach((cb) => cb());
+}
 
 export function getThumbnailUrl(asset: MediaAsset, size = 80): string | null {
   if (asset.mime_type.startsWith('audio/')) return null;
@@ -123,6 +133,7 @@ export function getThumbnailUrl(asset: MediaAsset, size = 80): string | null {
     generateThumbnail(asset, size).then((dataUrl) => {
       if (dataUrl) thumbCache.set(asset.id, dataUrl);
       thumbLoading.delete(asset.id);
+      notifyThumbnailReady();
     }).catch(() => {
       thumbLoading.delete(asset.id);
     });
