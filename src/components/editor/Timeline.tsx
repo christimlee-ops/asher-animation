@@ -146,6 +146,23 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
         const id = (active as any)._animId;
         if (id) {
           setSelectedAnimId(id);
+          // Auto-expand parent groups so the selected child is visible in the timeline
+          const row = allRows.find((r) => (r.obj as any)._animId === id);
+          if (row && row.parentGroup) {
+            setExpandedGroups((prev) => {
+              const next = new Set(prev);
+              // Walk up all ancestor groups and expand them
+              let cursor: fabric.Group | null = row.parentGroup;
+              while (cursor) {
+                const gid = (cursor as any)._animId;
+                if (gid) next.add(gid);
+                const parentRow = allRows.find((r) => r.obj === cursor);
+                cursor = parentRow?.parentGroup ?? null;
+              }
+              if (next.size === prev.size) return prev;
+              return next;
+            });
+          }
           // Auto-scroll timeline to show the selected row and its first keyframe
           requestAnimationFrame(() => {
             const labelEl = labelColRef.current;
