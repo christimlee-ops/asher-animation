@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
 } from 'react';
 import * as fabric from 'fabric';
+import { ensureAnimId } from '../../lib/animationState';
 import type { ToolName } from './ToolsPanel';
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -342,6 +343,11 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           centeredRotation: false, // rotate around origin (pivot), not center
           objectCaching: false, // prevent clipping of strokes/rotation
         });
+        // Set diagonal resize cursors on corner controls
+        if (obj.controls.tl) obj.controls.tl.cursorStyle = 'nwse-resize';
+        if (obj.controls.tr) obj.controls.tr.cursorStyle = 'nesw-resize';
+        if (obj.controls.bl) obj.controls.bl.cursorStyle = 'nesw-resize';
+        if (obj.controls.br) obj.controls.br.cursorStyle = 'nwse-resize';
         // Add the pivot control and override rotation control
         obj.controls.pivot = pivotControl;
         obj.controls.mtr = rotateControl;
@@ -1012,6 +1018,15 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           const fc = fcRef.current;
           if (!fc || !clipboardRef.current) return;
           clipboardRef.current.clone().then((cloned: fabric.FabricObject) => {
+            // Assign fresh anim IDs so the pasted object is immediately selectable in the timeline
+            const assignAnimIds = (obj: fabric.FabricObject) => {
+              (obj as any)._animId = undefined; // clear copied ID to get a fresh one
+              ensureAnimId(obj);
+              if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+                obj.getObjects().forEach(assignAnimIds);
+              }
+            };
+            assignAnimIds(cloned);
             cloned.set({
               left: (cloned.left || 0) + 20,
               top: (cloned.top || 0) + 20,
