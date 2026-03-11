@@ -85,10 +85,15 @@ export function removeKeyframe(timeline: ObjectTimeline, frame: number): void {
 export function interpolateAtFrame(timeline: ObjectTimeline, frame: number): Keyframe | null {
   const kfs = timeline.keyframes;
   if (kfs.length === 0) return null;
-  if (kfs.length === 1) return { ...kfs[0] };
+  if (kfs.length === 1) {
+    // Only apply at or after the keyframe's frame; before it, return null (use rest position)
+    if (frame < kfs[0].frame) return null;
+    return { ...kfs[0] };
+  }
 
-  // Before first keyframe
-  if (frame <= kfs[0].frame) return { ...kfs[0] };
+  // Before first keyframe — return null so the object stays at its rest position
+  if (frame < kfs[0].frame) return null;
+  if (frame === kfs[0].frame) return { ...kfs[0] };
   // After last keyframe
   if (frame >= kfs[kfs.length - 1].frame) return { ...kfs[kfs.length - 1] };
 

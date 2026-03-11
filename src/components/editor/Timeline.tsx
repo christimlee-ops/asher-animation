@@ -73,6 +73,8 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const labelColRef = useRef<HTMLDivElement | null>(null);
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
   const audioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  // Rest positions: stores each object's original position before animation was applied
+  const restPositionsRef = useRef<Map<string, { left: number; top: number; scaleX: number; scaleY: number; angle: number; opacity: number; originX: string; originY: string }>>(new Map());
   const animStateRef = useRef(animState);
   animStateRef.current = animState;
 
@@ -302,6 +304,19 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
         // Apply this object's own keyframe animation
         const id = (obj as any)._animId;
         if (id) {
+          // Save rest position for ALL objects before any animation modifies them
+          if (!restPositionsRef.current.has(id)) {
+            restPositionsRef.current.set(id, {
+              left: obj.left || 0,
+              top: obj.top || 0,
+              scaleX: obj.scaleX || 1,
+              scaleY: obj.scaleY || 1,
+              angle: obj.angle || 0,
+              opacity: obj.opacity ?? 1,
+              originX: String(obj.originX || 'center'),
+              originY: String(obj.originY || 'center'),
+            });
+          }
           const tl = animState.timelines.find((t) => t.objectId === id);
           if (tl && tl.keyframes.length > 0) {
             const kf = interpolateAtFrame(tl, frame);
@@ -313,6 +328,17 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
               });
               obj.dirty = true;
               obj.setCoords();
+            } else {
+              // Frame is before the first keyframe — restore rest position
+              const rest = restPositionsRef.current.get(id);
+              if (rest) {
+                obj.set({
+                  left: rest.left, top: rest.top, scaleX: rest.scaleX, scaleY: rest.scaleY, angle: rest.angle, opacity: rest.opacity,
+                  originX: rest.originX, originY: rest.originY,
+                });
+                obj.dirty = true;
+                obj.setCoords();
+              }
             }
           }
         }
