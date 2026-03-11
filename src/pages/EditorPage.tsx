@@ -230,11 +230,25 @@ export default function EditorPage() {
       // Image — add to canvas via fabric
       const c = canvasRef.current?.getCanvas();
       if (!c) return;
+      const isBackground = asset.category === 'backgrounds';
+      const CANVAS_W = 1920;
+      const CANVAS_H = 1080;
       if (asset.mime_type === 'image/svg+xml') {
         fabric.loadSVGFromURL(fullUrl).then((result) => {
           const group = fabric.util.groupSVGElements(result.objects.filter(Boolean) as fabric.FabricObject[], result.options);
-          group.scaleToWidth(200);
-          c.add(group);
+          if (isBackground) {
+            // Scale to cover the export area and position at origin
+            const scaleX = CANVAS_W / (group.width || 1);
+            const scaleY = CANVAS_H / (group.height || 1);
+            const scale = Math.max(scaleX, scaleY);
+            group.set({ scaleX: scale, scaleY: scale, left: 0, top: 0, originX: 'left', originY: 'top' });
+            // Send to back so it's behind other objects
+            c.add(group);
+            c.sendObjectToBack(group);
+          } else {
+            group.scaleToWidth(200);
+            c.add(group);
+          }
           c.setActiveObject(group);
           c.renderAll();
         });
@@ -243,8 +257,19 @@ export default function EditorPage() {
         imgEl.crossOrigin = 'anonymous';
         imgEl.onload = () => {
           const fImg = new fabric.FabricImage(imgEl);
-          fImg.scaleToWidth(200);
-          c.add(fImg);
+          if (isBackground) {
+            // Scale to cover the export area and position at origin
+            const scaleX = CANVAS_W / (fImg.width || 1);
+            const scaleY = CANVAS_H / (fImg.height || 1);
+            const scale = Math.max(scaleX, scaleY);
+            fImg.set({ scaleX: scale, scaleY: scale, left: 0, top: 0, originX: 'left', originY: 'top' });
+            // Send to back so it's behind other objects
+            c.add(fImg);
+            c.sendObjectToBack(fImg);
+          } else {
+            fImg.scaleToWidth(200);
+            c.add(fImg);
+          }
           c.setActiveObject(fImg);
           c.renderAll();
         };
