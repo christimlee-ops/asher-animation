@@ -608,6 +608,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           if (objs.length === 0) return;
           const group = objs.length === 1 ? objs[0] : fabric.util.groupSVGElements(objs);
           group.scaleToWidth(Math.min(400, CANVAS_W / 2));
+          group.set({ left: CANVAS_W / 2, top: CANVAS_H / 2, originX: 'center', originY: 'center' });
           fc.add(group);
           fc.setActiveObject(group);
           fc.renderAll();
@@ -616,6 +617,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
       } else if (isImage) {
         fabric.FabricImage.fromURL(dataUrl).then((img) => {
           img.scaleToWidth(Math.min(400, CANVAS_W / 2));
+          img.set({ left: CANVAS_W / 2, top: CANVAS_H / 2, originX: 'center', originY: 'center' });
           fc.add(img);
           fc.setActiveObject(img);
           fc.renderAll();

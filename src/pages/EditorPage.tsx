@@ -247,6 +247,7 @@ export default function EditorPage() {
             c.sendObjectToBack(group);
           } else {
             group.scaleToWidth(200);
+            group.set({ left: CANVAS_W / 2, top: CANVAS_H / 2, originX: 'center', originY: 'center' });
             c.add(group);
           }
           c.setActiveObject(group);
@@ -268,6 +269,7 @@ export default function EditorPage() {
             c.sendObjectToBack(fImg);
           } else {
             fImg.scaleToWidth(200);
+            fImg.set({ left: CANVAS_W / 2, top: CANVAS_H / 2, originX: 'center', originY: 'center' });
             c.add(fImg);
           }
           c.setActiveObject(fImg);
