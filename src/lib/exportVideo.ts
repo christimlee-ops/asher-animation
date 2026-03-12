@@ -83,15 +83,16 @@ export async function exportMultiScene({
 
   const videoStream = offscreen.captureStream(0);
 
-  // Collect all audio tracks across all scenes with their global time offsets
+  // Set up audio context for mixing audio into the export
   const audioCtx = new AudioContext();
   const destination = audioCtx.createMediaStreamDestination();
-  const audioSources: { source: AudioBufferSourceNode; startTimeSec: number }[] = [];
+  const allAudioSources: AudioBufferSourceNode[] = [];
 
-  let globalFrameOffset = 0;
   const sceneFrameCounts: number[] = [];
+  // Pre-decode audio for each scene so we know durations for scene length calculation.
+  // Store decoded buffers per scene so we can schedule playback later (just-in-time).
+  const sceneAudioData: { buffer: AudioBuffer; startFrame: number; volume: number }[][] = [];
 
-  // Calculate frame counts per scene and prepare audio
   for (let si = 0; si < allScenes.length; si++) {
     const scene = allScenes[si];
     const anim = scene.animState;
@@ -99,37 +100,25 @@ export async function exportMultiScene({
     const lastKf = getLastKeyframeFrame(anim);
     let lastAudioEndFrame = 0;
 
-    // Prepare audio for this scene (decode first so we know durations)
+    const decodedTracks: { buffer: AudioBuffer; startFrame: number; volume: number }[] = [];
     const tracks = anim.audioTracks || [];
     for (const track of tracks) {
       try {
         const res = await fetch(track.dataUrl);
         const arrayBuf = await res.arrayBuffer();
         const audioBuffer = await audioCtx.decodeAudioData(arrayBuf);
-        const source = audioCtx.createBufferSource();
-        source.buffer = audioBuffer;
-        const gainNode = audioCtx.createGain();
-        gainNode.gain.value = track.volume;
-        source.connect(gainNode);
-        gainNode.connect(destination);
-        const globalStartSec = (globalFrameOffset + track.startFrame) / fps;
-        audioSources.push({ source, startTimeSec: globalStartSec });
-        // Track the last audio end frame for scene duration
+        decodedTracks.push({ buffer: audioBuffer, startFrame: track.startFrame, volume: track.volume });
         const audioEndFrame = track.startFrame + Math.ceil(audioBuffer.duration * fps);
         lastAudioEndFrame = Math.max(lastAudioEndFrame, audioEndFrame);
       } catch (err) {
         console.warn(`Failed to decode audio track "${track.name}":`, err);
       }
     }
+    sceneAudioData.push(decodedTracks);
 
     // Scene duration = last content point (last keyframe or end of audio)
     const sceneFrames = Math.max(1, lastKf, lastAudioEndFrame);
     sceneFrameCounts.push(sceneFrames);
-
-    // The render loop uses 0..sceneFrames inclusive, so sceneFrames+1 frames
-    // are actually rendered per scene. Account for this in the global offset
-    // so audio for subsequent scenes isn't scheduled too early.
-    globalFrameOffset += sceneFrames + 1;
   }
 
   const totalFrames = sceneFrameCounts.reduce((a, b) => a + b + 1, 0);
@@ -139,7 +128,7 @@ export async function exportMultiScene({
   for (const vt of videoStream.getVideoTracks()) {
     combinedStream.addTrack(vt);
   }
-  if (audioSources.length > 0) {
+  if (sceneAudioData.some(tracks => tracks.length > 0)) {
     for (const at of destination.stream.getAudioTracks()) {
       combinedStream.addTrack(at);
     }
@@ -170,12 +159,6 @@ export async function exportMultiScene({
   log('Recording frames...');
   recorder.start();
 
-  // Start all audio sources
-  const recordingStartTime = audioCtx.currentTime;
-  for (const { source, startTimeSec } of audioSources) {
-    source.start(recordingStartTime + startTimeSec);
-  }
-
   let globalFrame = 0;
 
   for (let si = 0; si < allScenes.length; si++) {
@@ -191,6 +174,20 @@ export async function exportMultiScene({
       await canvas.loadFromJSON(scene.canvasJSON);
       canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
       canvas.setDimensions({ width, height });
+    }
+
+    // Schedule this scene's audio NOW, right before rendering begins.
+    // This ensures loadFromJSON delays don't cause audio to drift ahead.
+    const sceneStartTime = audioCtx.currentTime;
+    for (const { buffer, startFrame, volume } of sceneAudioData[si]) {
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      const gainNode = audioCtx.createGain();
+      gainNode.gain.value = volume;
+      source.connect(gainNode);
+      gainNode.connect(destination);
+      source.start(sceneStartTime + startFrame / fps);
+      allAudioSources.push(source);
     }
 
     for (let frame = 0; frame <= sceneFrames; frame++) {
@@ -210,7 +207,6 @@ export async function exportMultiScene({
       }
 
       // Wait only the remaining time so each frame takes ~frameDuration in wall-clock time.
-      // Without this, render time + full frameDuration delay causes audio to drift ahead.
       const elapsed = performance.now() - frameStart;
       const waitTime = Math.max(0, frameDuration - elapsed);
       await new Promise((r) => setTimeout(r, waitTime));
@@ -225,7 +221,7 @@ export async function exportMultiScene({
   recorder.stop();
   await recorderReady;
 
-  for (const { source } of audioSources) {
+  for (const source of allAudioSources) {
     try { source.stop(); } catch (_) { /* already stopped */ }
   }
   await audioCtx.close();
