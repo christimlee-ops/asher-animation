@@ -116,8 +116,9 @@ export async function exportMultiScene({
     }
     sceneAudioData.push(decodedTracks);
 
-    // Scene duration = last content point (last keyframe or end of audio)
-    const sceneFrames = Math.max(1, lastKf, lastAudioEndFrame);
+    // Scene duration = last content point (last keyframe or end of audio),
+    // but at minimum use the scene's configured totalFrames for static scenes.
+    const sceneFrames = Math.max(1, lastKf, lastAudioEndFrame, anim.totalFrames);
     sceneFrameCounts.push(sceneFrames);
   }
 
