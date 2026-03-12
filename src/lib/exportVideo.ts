@@ -126,10 +126,13 @@ export async function exportMultiScene({
     const sceneFrames = Math.max(1, lastKf, lastAudioEndFrame);
     sceneFrameCounts.push(sceneFrames);
 
-    globalFrameOffset += sceneFrames;
+    // The render loop uses 0..sceneFrames inclusive, so sceneFrames+1 frames
+    // are actually rendered per scene. Account for this in the global offset
+    // so audio for subsequent scenes isn't scheduled too early.
+    globalFrameOffset += sceneFrames + 1;
   }
 
-  const totalFrames = sceneFrameCounts.reduce((a, b) => a + b, 0);
+  const totalFrames = sceneFrameCounts.reduce((a, b) => a + b + 1, 0);
 
   // Combine video + audio streams
   const combinedStream = new MediaStream();
