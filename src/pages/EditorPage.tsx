@@ -75,20 +75,19 @@ export default function EditorPage() {
     if (index === activeSceneIndex || switchingSceneRef.current) return;
     switchingSceneRef.current = true;
 
-    // Save current scene first
+    // Save current scene first (compute locally, don't set state yet)
     const canvasJson = canvasRef.current?.toJSON();
     let updatedScenes = scenes;
     if (canvasJson) {
       updatedScenes = scenes.map((s, i) =>
         i === activeSceneIndex ? { ...s, canvasJSON: canvasJson, animState } : s
       );
-      setScenes(updatedScenes);
     }
 
-    // Load the target scene
+    // Load the target scene's canvas (async — do this BEFORE any state updates
+    // so all setState calls happen in the same microtask and React batches them)
     const targetScene = updatedScenes[index];
     if (targetScene) {
-      setAnimState(targetScene.animState);
       if (targetScene.canvasJSON) {
         await canvasRef.current?.loadJSON(targetScene.canvasJSON);
       } else {
@@ -96,6 +95,12 @@ export default function EditorPage() {
       }
     }
 
+    // All state updates after the await — React batches into one render,
+    // so the Timeline key, animState, and scenes all update atomically
+    setScenes(updatedScenes);
+    if (targetScene) {
+      setAnimState(targetScene.animState);
+    }
     setActiveSceneIndex(index);
     setSelectedObject(null);
     setCanvasVersion((v) => v + 1);
