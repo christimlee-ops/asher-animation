@@ -422,6 +422,18 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioTrackIds]);
 
+  // Cleanup all audio elements on unmount (e.g. when switching scenes)
+  useEffect(() => {
+    const map = audioElementsRef.current;
+    return () => {
+      for (const [, audio] of map.entries()) {
+        audio.pause();
+        audio.src = '';
+      }
+      map.clear();
+    };
+  }, []);
+
   // Update volume
   useEffect(() => {
     const map = audioElementsRef.current;
