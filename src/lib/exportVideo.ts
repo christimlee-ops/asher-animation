@@ -52,9 +52,6 @@ function applyAnimToObjects(objs: fabric.FabricObject[], frame: number, timeline
       applyAnimToObjects((obj as fabric.Group).getObjects(), frame, timelines);
       obj.dirty = true;
       obj.setCoords();
-      if (typeof (obj as any)._calcBounds === 'function') {
-        (obj as any)._calcBounds();
-      }
     }
   }
 }

@@ -271,21 +271,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
   const applyFrame = useCallback((frame: number) => {
     if (!canvas) return;
 
-    // Helper: check if any child inside a group has animated keyframes
-    const hasAnimatedChildren = (group: fabric.Group): boolean => {
-      for (const child of group.getObjects()) {
-        const cid = (child as any)._animId;
-        if (cid) {
-          const ctl = animState.timelines.find((t) => t.objectId === cid);
-          if (ctl && ctl.keyframes.length > 0) return true;
-        }
-        if (child instanceof fabric.Group) {
-          if (hasAnimatedChildren(child)) return true;
-        }
-      }
-      return false;
-    };
-
     const applyToObjects = (objs: fabric.FabricObject[]) => {
       for (const obj of objs) {
         if ((obj as any).excludeFromExport || (obj as any)._isBoundary) continue;
@@ -293,10 +278,6 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
         // Recurse into group children first
         if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
           applyToObjects((obj as fabric.Group).getObjects());
-          // Only recalculate bounds if children were individually animated
-          if (hasAnimatedChildren(obj as fabric.Group)) {
-            try { (obj as any)._calcBounds(); } catch (_) { /* ignore if not available */ }
-          }
           obj.dirty = true;
           obj.setCoords();
         }
