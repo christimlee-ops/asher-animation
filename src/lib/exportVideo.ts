@@ -95,9 +95,9 @@ export async function exportMultiScene({
   for (let si = 0; si < allScenes.length; si++) {
     const scene = allScenes[si];
     const anim = scene.animState;
+    // Use the scene's full totalFrames duration so audio offsets are correct
     const lastKf = getLastKeyframeFrame(anim);
-    // At least 1 frame per scene, use last keyframe as the scene duration
-    const sceneFrames = Math.max(1, lastKf);
+    const sceneFrames = Math.max(1, lastKf, anim.totalFrames);
     sceneFrameCounts.push(sceneFrames);
 
     // Prepare audio for this scene
