@@ -191,6 +191,8 @@ export async function exportMultiScene({
     }
 
     for (let frame = 0; frame <= sceneFrames; frame++) {
+      const frameStart = performance.now();
+
       applyAnimToObjects(canvas.getObjects(), frame, scene.animState.timelines);
       canvas.discardActiveObject();
       canvas.renderAll();
@@ -204,7 +206,11 @@ export async function exportMultiScene({
         (videoTrack as any).requestFrame();
       }
 
-      await new Promise((r) => setTimeout(r, frameDuration));
+      // Wait only the remaining time so each frame takes ~frameDuration in wall-clock time.
+      // Without this, render time + full frameDuration delay causes audio to drift ahead.
+      const elapsed = performance.now() - frameStart;
+      const waitTime = Math.max(0, frameDuration - elapsed);
+      await new Promise((r) => setTimeout(r, waitTime));
 
       globalFrame++;
       if (globalFrame % fps === 0) {
