@@ -95,12 +95,11 @@ export async function exportMultiScene({
   for (let si = 0; si < allScenes.length; si++) {
     const scene = allScenes[si];
     const anim = scene.animState;
-    // Use the scene's full totalFrames duration so audio offsets are correct
+    const fps = anim.fps;
     const lastKf = getLastKeyframeFrame(anim);
-    const sceneFrames = Math.max(1, lastKf, anim.totalFrames);
-    sceneFrameCounts.push(sceneFrames);
+    let lastAudioEndFrame = 0;
 
-    // Prepare audio for this scene
+    // Prepare audio for this scene (decode first so we know durations)
     const tracks = anim.audioTracks || [];
     for (const track of tracks) {
       try {
@@ -113,12 +112,19 @@ export async function exportMultiScene({
         gainNode.gain.value = track.volume;
         source.connect(gainNode);
         gainNode.connect(destination);
-        const globalStartSec = (globalFrameOffset + track.startFrame) / anim.fps;
+        const globalStartSec = (globalFrameOffset + track.startFrame) / fps;
         audioSources.push({ source, startTimeSec: globalStartSec });
+        // Track the last audio end frame for scene duration
+        const audioEndFrame = track.startFrame + Math.ceil(audioBuffer.duration * fps);
+        lastAudioEndFrame = Math.max(lastAudioEndFrame, audioEndFrame);
       } catch (err) {
         console.warn(`Failed to decode audio track "${track.name}":`, err);
       }
     }
+
+    // Scene duration = last content point (last keyframe or end of audio)
+    const sceneFrames = Math.max(1, lastKf, lastAudioEndFrame);
+    sceneFrameCounts.push(sceneFrames);
 
     globalFrameOffset += sceneFrames;
   }
