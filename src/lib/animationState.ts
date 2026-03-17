@@ -120,6 +120,8 @@ export function interpolateAtFrame(timeline: ObjectTimeline, frame: number): Key
     scaleY: prev.scaleY + (next.scaleY - prev.scaleY) * t,
     angle: prev.angle + (next.angle - prev.angle) * t,
     opacity: prev.opacity + (next.opacity - prev.opacity) * t,
+    originX: prev.originX,
+    originY: prev.originY,
   };
 }
 
