@@ -177,6 +177,12 @@ export async function exportMultiScene({
     // Load this scene's canvas
     if (scene.canvasJSON) {
       await canvas.loadFromJSON(scene.canvasJSON);
+      // Use FixedLayout for groups so coordinate system stays stable during animation
+      canvas.getObjects().forEach((obj) => {
+        if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+          obj.layoutManager = new fabric.LayoutManager(new fabric.FixedLayout());
+        }
+      });
       canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
       canvas.setDimensions({ width, height });
     }

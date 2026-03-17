@@ -93,6 +93,12 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
         const json = historyRef.current[index];
         if (!json) return;
         fc.loadFromJSON(JSON.parse(json)).then(() => {
+          // Use FixedLayout for groups so coordinate system stays stable during animation
+          fc.getObjects().forEach((obj) => {
+            if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+              obj.layoutManager = new fabric.LayoutManager(new fabric.FixedLayout());
+            }
+          });
           fc.renderAll();
           historyIndexRef.current = index;
           onHistoryChange(index > 0, index < historyRef.current.length - 1);
@@ -868,13 +874,21 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           const fc = fcRef.current;
           if (!fc) return Promise.resolve();
           return fc.loadFromJSON(json).then(() => {
-            // Restore locked state on loaded objects
-            fc.getObjects().forEach((obj) => {
-              if ((obj as any)._locked) {
-                obj.selectable = false;
-                obj.evented = false;
+            // Restore locked state and fix group layout on loaded objects
+            const fixObjects = (objs: fabric.FabricObject[]) => {
+              for (const obj of objs) {
+                if ((obj as any)._locked) {
+                  obj.selectable = false;
+                  obj.evented = false;
+                }
+                // Use FixedLayout for groups so the coordinate system stays stable during animation
+                if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+                  obj.layoutManager = new fabric.LayoutManager(new fabric.FixedLayout());
+                  fixObjects(obj.getObjects());
+                }
               }
-            });
+            };
+            fixObjects(fc.getObjects());
             fc.renderAll();
             saveHistory();
           });
@@ -917,6 +931,7 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
           const group = new fabric.Group(objects, {
             subTargetCheck: true,
             interactive: false,
+            layoutManager: new fabric.LayoutManager(new fabric.FixedLayout()),
           });
           fc.add(group);
           fc.setActiveObject(group);
