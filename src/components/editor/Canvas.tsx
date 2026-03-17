@@ -364,11 +364,11 @@ const CanvasEditor = forwardRef<CanvasHandle, CanvasProps>(
       };
       fc.on('object:added', (e) => { if (e.target) styleHandles(e.target); });
 
-      // Override rotation transform origin to use object's pivot (originX/originY)
+      // Override all transform origins to use object's pivot (originX/originY)
+      // This ensures the pivot point stays fixed during rotation, scaling, etc.
       fc.on('before:transform', (opt: any) => {
         const t = opt.transform;
-        if (t && t.action === 'rotate') {
-          // Force transform to use the object's actual origin as the rotation anchor
+        if (t && (t.action === 'rotate' || t.action === 'scale' || t.action === 'scaleX' || t.action === 'scaleY')) {
           t.originX = t.target.originX;
           t.originY = t.target.originY;
         }
