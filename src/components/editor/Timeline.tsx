@@ -277,7 +277,11 @@ export default function TimelinePanel({ canvas, animState, onAnimStateChange, da
 
         // Recurse into group children first
         if (obj instanceof fabric.Group && !(obj instanceof fabric.ActiveSelection)) {
+          // Disable layout recalculation so animating children doesn't shift the group
+          const savedPerformLayout = obj.layoutManager.performLayout;
+          obj.layoutManager.performLayout = () => {};
           applyToObjects((obj as fabric.Group).getObjects());
+          obj.layoutManager.performLayout = savedPerformLayout;
           obj.dirty = true;
           obj.setCoords();
         }

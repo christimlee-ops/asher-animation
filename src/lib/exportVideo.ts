@@ -49,7 +49,11 @@ function applyAnimToObjects(objs: fabric.FabricObject[], frame: number, timeline
       }
     }
     if (obj instanceof fabric.Group) {
+      // Disable layout recalculation so animating children doesn't shift the group
+      const savedPerformLayout = obj.layoutManager.performLayout;
+      obj.layoutManager.performLayout = () => {};
       applyAnimToObjects((obj as fabric.Group).getObjects(), frame, timelines);
+      obj.layoutManager.performLayout = savedPerformLayout;
       obj.dirty = true;
       obj.setCoords();
     }
